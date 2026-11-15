@@ -104,7 +104,12 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({ onOpenAddAsset }) => {
           </div>
 
           <div className="space-y-2">
-            {stocks.map((stock) => {
+            {stocks.length === 0 ? (
+              <div className="p-5 bg-white rounded-2xl border border-rose-100 text-center">
+                <p className="text-xs text-slate-500 font-medium">Belum ada portofolio saham</p>
+              </div>
+            ) : (
+              stocks.map((stock) => {
               const totalVal = stock.lots * 100 * stock.currentPrice;
               const cost = stock.lots * 100 * stock.avgBuy;
               const pl = totalVal - cost;
@@ -163,7 +168,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({ onOpenAddAsset }) => {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
       )}
@@ -186,7 +191,12 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({ onOpenAddAsset }) => {
           </div>
 
           <div className="space-y-2">
-            {goldHoldings.map((gold) => {
+            {goldHoldings.length === 0 ? (
+              <div className="p-5 bg-white rounded-2xl border border-rose-100 text-center">
+                <p className="text-xs text-slate-500 font-medium">Belum ada simpanan emas</p>
+              </div>
+            ) : (
+              goldHoldings.map((gold) => {
               const livePrice = gold.type === 'spot' ? goldPrices.spot : goldPrices.antam;
               const totalVal = gold.grams * livePrice;
               const cost = gold.grams * gold.avgBuy;
@@ -246,7 +256,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({ onOpenAddAsset }) => {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
       )}

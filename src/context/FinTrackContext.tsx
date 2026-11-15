@@ -47,6 +47,8 @@ export interface FinTrackMetrics {
 }
 
 interface FinTrackContextType {
+  userName: string;
+  setUserName: (name: string) => void;
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab, highlightCcId?: string | null) => void;
   chartMode: ChartMode;
@@ -90,6 +92,9 @@ interface FinTrackContextType {
   payAllCcDue: () => void;
   updateCcItem: (id: string, updates: Partial<Transaction>) => void;
   resetAllData: () => void;
+  resetToZero: () => void;
+  exportData: () => string;
+  importData: (jsonStr: string) => boolean;
 }
 
 const STORAGE_KEY = 'fintrack_state_v2';
@@ -113,6 +118,7 @@ export const getTxCcHold = (tx: Transaction): number => {
 const FinTrackContext = createContext<FinTrackContextType | undefined>(undefined);
 
 export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [userName, setUserNameState] = useState<string>('Rose');
   const [activeTab, setActiveTabState] = useState<ActiveTab>('dashboard');
   const [chartMode, setChartMode] = useState<ChartMode>('week');
   const [compareOct, setCompareOct] = useState(false);
@@ -143,6 +149,9 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (typeof parsed.userName === 'string' && parsed.userName.trim()) {
+          setUserNameState(parsed.userName.trim());
+        }
         if (typeof parsed.cashBalance === 'number') setCashBalanceState(parsed.cashBalance);
         if (typeof parsed.ccLimit === 'number') setCcLimitState(parsed.ccLimit);
         if (typeof parsed.ccDueDate === 'number') setCcDueDateState(parsed.ccDueDate);
@@ -160,6 +169,7 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     try {
       const payload = {
+        userName,
         cashBalance,
         ccLimit,
         ccDueDate,
@@ -172,7 +182,7 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch {
       // Storage quota or error safe guard
     }
-  }, [cashBalance, ccLimit, ccDueDate, categories, transactions, stocks, goldHoldings]);
+  }, [userName, cashBalance, ccLimit, ccDueDate, categories, transactions, stocks, goldHoldings]);
 
   const setActiveTab = (tab: ActiveTab, highlightId: string | null = null) => {
     setActiveTabState(tab);
@@ -305,8 +315,22 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setGoldHoldings((prev) => prev.filter((g) => g.id !== id));
   };
 
+  const setUserName = (name: string) => {
+    const trimmed = name.trim();
+    setUserNameState(trimmed || 'Rose');
+  };
+
+  const resetToZero = () => {
+    setTransactions([]);
+    setStocks([]);
+    setGoldHoldings([]);
+    setCashBalanceState(0);
+    setCcLimitState(0);
+  };
+
   const resetAllData = () => {
     localStorage.removeItem(STORAGE_KEY);
+    setUserNameState('Rose');
     setCashBalanceState(18250000);
     setCcLimitState(20000000);
     setCcDueDateState(25);
@@ -314,6 +338,39 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTransactions(INITIAL_TRANSACTIONS);
     setStocks(INITIAL_STOCKS);
     setGoldHoldings(INITIAL_GOLD_HOLDINGS);
+  };
+
+  const exportData = (): string => {
+    const payload = {
+      version: 2,
+      exportDate: new Date().toISOString(),
+      userName,
+      cashBalance,
+      ccLimit,
+      ccDueDate,
+      categories,
+      transactions,
+      stocks,
+      goldHoldings,
+    };
+    return JSON.stringify(payload, null, 2);
+  };
+
+  const importData = (jsonStr: string): boolean => {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (typeof parsed.userName === 'string') setUserNameState(parsed.userName.trim() || 'Rose');
+      if (typeof parsed.cashBalance === 'number') setCashBalanceState(parsed.cashBalance);
+      if (typeof parsed.ccLimit === 'number') setCcLimitState(parsed.ccLimit);
+      if (typeof parsed.ccDueDate === 'number') setCcDueDateState(parsed.ccDueDate);
+      if (Array.isArray(parsed.categories)) setCategories(parsed.categories);
+      if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
+      if (Array.isArray(parsed.stocks)) setStocks(parsed.stocks);
+      if (Array.isArray(parsed.goldHoldings)) setGoldHoldings(parsed.goldHoldings);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   // Metrics computation
@@ -407,6 +464,8 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   return (
     <FinTrackContext.Provider
       value={{
+        userName,
+        setUserName,
         activeTab,
         setActiveTab,
         chartMode,
@@ -450,6 +509,9 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         payAllCcDue,
         updateCcItem,
         resetAllData,
+        resetToZero,
+        exportData,
+        importData,
       }}
     >
       {children}

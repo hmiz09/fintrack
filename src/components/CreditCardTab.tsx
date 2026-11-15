@@ -164,7 +164,14 @@ export const CreditCardTab: React.FC<CreditCardTabProps> = ({
         </div>
 
         <div className="space-y-2.5">
-          {metrics.ccItems.map((tx) => {
+          {metrics.ccItems.length === 0 ? (
+            <div className="p-6 bg-white rounded-2xl border border-rose-100 text-center">
+              <p className="text-xs text-slate-500 font-medium">
+                Belum ada transaksi kartu kredit aktif
+              </p>
+            </div>
+          ) : (
+            metrics.ccItems.map((tx) => {
             const isExpanded = expandedCcId === tx.id;
             const iconName = catMap.get(tx.category) || 'tag';
             const monthly = getTxMonthlyBill(tx);
@@ -308,7 +315,7 @@ export const CreditCardTab: React.FC<CreditCardTabProps> = ({
                 )}
               </div>
             );
-          })}
+          }))}
         </div>
       </div>
     </div>

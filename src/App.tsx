@@ -14,6 +14,7 @@ import { LimitModal } from './components/modals/LimitModal';
 import { CashModal } from './components/modals/CashModal';
 import { CategoryModal } from './components/modals/CategoryModal';
 import { AssetModal } from './components/modals/AssetModal';
+import { ProfileModal } from './components/modals/ProfileModal';
 
 import type { Transaction, ActiveTab } from './types';
 import { LayoutDashboard, History, CreditCard, TrendingUp, Plus } from 'lucide-react';
@@ -30,6 +31,7 @@ const FinTrackApp: React.FC = () => {
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const handleOpenAddTx = () => {
     setEditingTx(null);
@@ -56,7 +58,10 @@ const FinTrackApp: React.FC = () => {
       {/* Mobile constrained frame */}
       <div className="w-full max-w-md min-h-screen bg-[#fff9fb] border-x border-rose-200/60 shadow-xl flex flex-col relative pb-28">
         {/* Top Header (User greeting, avatar, settings icon) */}
-        <TopHeader onOpenCategories={() => setIsCategoryModalOpen(true)} />
+        <TopHeader
+          onOpenCategories={() => setIsCategoryModalOpen(true)}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
+        />
 
         {/* Dynamic Tab Content */}
         <main className="flex-1 mt-1">
@@ -183,6 +188,11 @@ const FinTrackApp: React.FC = () => {
         <AssetModal
           isOpen={isAssetModalOpen}
           onClose={() => setIsAssetModalOpen(false)}
+        />
+
+        <ProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
         />
       </div>
     </div>

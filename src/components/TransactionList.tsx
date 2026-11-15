@@ -111,7 +111,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       <div className="space-y-2">
         {displayList.length === 0 ? (
           <div className="bg-white rounded-2xl p-8 text-center border border-rose-200/60">
-            <p className="text-xs text-slate-500 font-medium">No transactions found</p>
+            <p className="text-xs text-slate-500 font-medium">
+              Belum ada catatan transaksi. Tap tombol <strong className="text-rose-600">+</strong> di bawah untuk mulai mencatat!
+            </p>
           </div>
         ) : (
           displayList.map((tx) => {
