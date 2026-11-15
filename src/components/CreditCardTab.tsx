@@ -1,22 +1,26 @@
 import React from 'react';
 import { useFinTrack, getTxMonthlyBill } from '../context/FinTrackContext';
-import { CATEGORY_ICONS, CategoryIcon } from '../constants/icons';
+import { CategoryIcon } from '../constants/icons';
 import { formatIDR, getOrdinalDay } from '../utils/formatters';
 import type { Transaction } from '../types';
-import { ChevronDown } from 'lucide-react';
+import {
+  CreditCard,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  Sparkles,
+} from 'lucide-react';
 
 interface CreditCardTabProps {
   onOpenLimitModal: () => void;
   onOpenDueDateModal: () => void;
-  onEditTransaction: (tx: Transaction) => void;
-  onOpenAddModal: () => void;
 }
 
 export const CreditCardTab: React.FC<CreditCardTabProps> = ({
   onOpenLimitModal,
   onOpenDueDateModal,
-  onEditTransaction,
-  onOpenAddModal,
 }) => {
   const {
     metrics,
@@ -25,396 +29,287 @@ export const CreditCardTab: React.FC<CreditCardTabProps> = ({
     categories,
     expandedCcId,
     setExpandedCcId,
-    highlightedCcId,
     payAllCcDue,
     updateCcItem,
-    setActiveTab,
   } = useFinTrack();
 
   const catMap = new Map(categories.map((c) => [c.name, c.icon]));
 
-  const paidCount = metrics.ccItems.filter((t) => t.paidThisMonth).length;
-  const activeCcItems = metrics.ccItems.filter((t) => !(t.ccMode === 'full' && t.paidThisMonth));
-  const settledFullCount = metrics.ccItems.length - activeCcItems.length;
-
-  const toggleCcExpand = (id: string) => {
+  const toggleExpand = (id: string) => {
     setExpandedCcId(expandedCcId === id ? null : id);
   };
 
-  const setCcScheme = (id: string, mode: 'full' | 'installment', tenor: number) => {
-    updateCcItem(id, { ccMode: mode, tenor });
+  const handleTenorChange = (tx: Transaction, tenor: number) => {
+    if (tenor === 1) {
+      updateCcItem(tx.id, { ccMode: 'full', tenor: 1 });
+    } else {
+      updateCcItem(tx.id, { ccMode: 'installment', tenor });
+    }
   };
 
-  const toggleCcPaid = (id: string) => {
-    const tx = metrics.ccItems.find((t) => t.id === id);
-    if (!tx) return;
-    updateCcItem(id, { paidThisMonth: !tx.paidThisMonth });
+  const togglePaidStatus = (tx: Transaction) => {
+    updateCcItem(tx.id, { paidThisMonth: !tx.paidThisMonth });
   };
 
   return (
-    <div className="space-y-4">
-      {/* Top Header */}
-      <div className="pt-3">
-        <p className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
-          Credit Card
-        </p>
-        <h2 className="text-xl font-bold tracking-tight leading-tight">Limit &amp; Bills</h2>
-      </div>
-
-      {/* Credit Card Limit Card (Tap Card to Set Limit) */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpenLimitModal}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onOpenLimitModal();
-          }
-        }}
-        aria-label={`Credit Card Available Limit ${formatIDR(metrics.ccAvailableLimit)}, tap to set limit`}
-        className="cc-plum-card btn-tactile text-left rounded-2xl p-4 shadow-md space-y-3.5 cursor-pointer"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs font-medium" style={{ color: '#f9d6e5' }}>
-              Available Limit
-            </p>
-            <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
-              {formatIDR(metrics.ccAvailableLimit)}
-            </p>
+    <div className="px-5 mb-8">
+      {/* Plum Credit Card Hero */}
+      <div className="bg-[#3b142b] border border-[#6b244e] text-white p-5 rounded-3xl shadow-md mb-4 relative overflow-hidden">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
+              <CreditCard className="w-4 h-4 text-pink-300" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-pink-200">Platinum Card</p>
+              <p className="text-[11px] text-pink-300/70">•••• 8829</p>
+            </div>
           </div>
-          <div className="text-right text-xs tabular-nums" style={{ color: '#f9d6e5' }}>
-            <span className="block">Total Limit</span>
-            <strong className="text-sm font-bold text-white">{formatIDR(ccLimit)}</strong>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.2)' }}>
-            <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: `${Math.min(100, metrics.ccLimitPct).toFixed(1)}%`,
-                background: '#ffffff',
-              }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-xs tabular-nums" style={{ color: '#f9d6e5' }}>
-            <span>
-              Used: <strong className="text-white">{formatIDR(metrics.ccUsedLimit)}</strong>
-            </span>
-            <span>
-              Available: <strong className="text-white">{(100 - metrics.ccLimitPct).toFixed(0)}%</strong>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Due This Month Summary (Monthly Statement Payment - Tappable Card) */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpenDueDateModal}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onOpenDueDateModal();
-          }
-        }}
-        aria-label={`Due Date ${getOrdinalDay(ccDueDate)}, tap to change`}
-        className="btn-tactile btn-surface text-left rounded-2xl p-4 border space-y-3 cursor-pointer"
-        style={{
-          background: 'var(--pk-card)',
-          borderColor: 'var(--pk-border)',
-        }}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
-              Due Date ({getOrdinalDay(ccDueDate)})
-            </p>
-            <p className="text-xl font-bold tabular-nums tracking-tight mt-0.5">
-              {formatIDR(metrics.ccDueUnpaid)}
-            </p>
-          </div>
-          <span
-            className="text-xs font-semibold px-2.5 py-1 rounded-lg"
-            style={{
-              background:
-                metrics.ccDueUnpaid === 0
-                  ? 'var(--pk-success-soft)'
-                  : 'var(--pk-primary-soft)',
-              color:
-                metrics.ccDueUnpaid === 0
-                  ? 'var(--pk-success-text)'
-                  : 'var(--pk-primary-text)',
-            }}
-          >
-            {metrics.ccDueUnpaid === 0 ? 'All Paid' : `${paidCount}/${metrics.ccItems.length} Paid`}
+          <span className="text-[11px] font-bold tracking-wider px-2.5 py-1 rounded-full bg-white/10 text-pink-200">
+            VISA
           </span>
         </div>
 
-        {metrics.ccDueUnpaid > 0 && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              payAllCcDue();
+        {/* Dual Interactive Cards: Available Limit & Due Date */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {/* Entire Card Clickable to Set Limit */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onOpenLimitModal}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpenLimitModal();
+              }
             }}
-            className="btn-primary w-full min-h-[44px] py-2.5 px-4 rounded-xl text-xs font-bold border"
+            className="bg-white/10 hover:bg-white/15 active:scale-95 p-3 rounded-2xl border border-white/15 transition-all text-left cursor-pointer min-h-[70px] flex flex-col justify-center focus-visible:outline-2 focus-visible:outline-pink-400"
           >
-            Pay Statement ({formatIDR(metrics.ccDueUnpaid)})
-          </button>
-        )}
-      </div>
+            <span className="text-[11px] text-pink-200/80 font-medium">Available Limit</span>
+            <div className="text-sm font-bold text-white mt-0.5 truncate">
+              {formatIDR(metrics.ccAvailableLimit)}
+            </div>
+          </div>
 
-      {/* Compact Expandable Payment List */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Upcoming Payments</h3>
-          {activeCcItems.length > 0 && (
-            <span className="text-xs" style={{ color: 'var(--pk-muted)' }}>
-              Tap item for tenor
+          {/* Entire Card Clickable to Change Due Date */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onOpenDueDateModal}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpenDueDateModal();
+              }
+            }}
+            className="bg-white/10 hover:bg-white/15 active:scale-95 p-3 rounded-2xl border border-white/15 transition-all text-left cursor-pointer min-h-[70px] flex flex-col justify-center focus-visible:outline-2 focus-visible:outline-pink-400"
+          >
+            <span className="text-[11px] text-pink-200/80 font-medium flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-pink-300" />
+              Due Date
             </span>
-          )}
+            <div className="text-sm font-bold text-white mt-0.5">
+              {getOrdinalDay(ccDueDate)}
+            </div>
+          </div>
         </div>
 
-        {activeCcItems.length > 0 ? (
-          activeCcItems.map((tx) => {
-            const isInst = tx.ccMode === 'installment';
-            const monthlyAmt = getTxMonthlyBill(tx);
+        {/* Limit Usage Bar */}
+        <div>
+          <div className="flex justify-between text-[11px] text-pink-200/80 mb-1.5 font-medium">
+            <span>Used: {formatIDR(metrics.ccUsedLimit)}</span>
+            <span>Limit: {formatIDR(ccLimit)}</span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-black/30 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-pink-400 to-rose-400 rounded-full transition-all duration-300"
+              style={{ width: `${Math.min(100, metrics.ccLimitPct)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Pay Statement Banner (When bills are due) */}
+      {metrics.ccDueUnpaid > 0 ? (
+        <div className="mb-5 p-4 rounded-3xl bg-rose-50 border border-rose-200/80 flex items-center justify-between gap-3 shadow-2xs">
+          <div className="min-w-0">
+            <p className="text-xs text-rose-900 font-bold">Unpaid Statement</p>
+            <p className="text-xs text-rose-700/80 mt-0.5">
+              Total bill: <strong className="text-rose-900">{formatIDR(metrics.ccDueUnpaid)}</strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={payAllCcDue}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-2xl shadow-xs transition-all shrink-0 min-h-[44px] flex items-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Pay Statement</span>
+          </button>
+        </div>
+      ) : (
+        <div className="mb-5 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/70 flex items-center gap-2.5 text-xs text-emerald-800 font-medium">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>All credit card bills for this month are fully settled!</span>
+        </div>
+      )}
+
+      {/* Active CC Expenses List */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-bold text-slate-800">Card Charges & Installments</h2>
+          <span className="text-xs text-slate-400 font-medium">
+            {metrics.ccItems.length} active
+          </span>
+        </div>
+
+        <div className="space-y-2.5">
+          {metrics.ccItems.map((tx) => {
             const isExpanded = expandedCcId === tx.id;
-            const isHighlighted = highlightedCcId === tx.id;
-            const iconKey = catMap.get(tx.category) || 'tag';
-            const palette = CATEGORY_ICONS[iconKey] || CATEGORY_ICONS.tag;
-            const schemeLabel =
-              isInst && tx.tenor
-                ? `${(tx.installmentPaidCount || 0) + 1}/${tx.tenor} mo`
-                : 'Full';
+            const iconName = catMap.get(tx.category) || 'tag';
+            const monthly = getTxMonthlyBill(tx);
+            const isInstallment = tx.ccMode === 'installment' && tx.tenor && tx.tenor > 1;
+            const paidCount = tx.installmentPaidCount || 0;
+            const totalTenor = tx.tenor || 1;
+            const isSettled = tx.paidThisMonth;
 
             return (
               <div
                 key={tx.id}
-                id={`cc-item-${tx.id}`}
-                className="rounded-2xl border overflow-hidden transition-colors"
-                style={{
-                  background: 'var(--pk-card)',
-                  borderColor:
-                    isExpanded || isHighlighted
-                      ? 'var(--pk-primary)'
-                      : 'var(--pk-border)',
-                  boxShadow: isHighlighted ? '0 0 0 2px var(--pk-primary)' : 'none',
-                }}
+                className="bg-white rounded-2xl border border-rose-100 overflow-hidden shadow-2xs transition-all"
               >
-                <button
-                  type="button"
-                  onClick={() => toggleCcExpand(tx.id)}
-                  aria-expanded={isExpanded}
-                  className="btn-plain w-full text-left px-3.5 py-3 flex items-center justify-between gap-2.5"
+                {/* Header Row (Click to Expand) */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleExpand(tx.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleExpand(tx.id);
+                    }
+                  }}
+                  className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-rose-50/40 transition-colors min-h-[58px]"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: palette.bg }}
-                    >
-                      <CategoryIcon icon={iconKey} className="w-4 h-4" />
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center shrink-0">
+                      <CategoryIcon icon={iconName} className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
-                      <p
-                        className={`text-sm font-semibold truncate leading-snug ${
-                          tx.paidThisMonth ? 'line-through opacity-60' : ''
-                        }`}
-                      >
+                      <p className="text-xs font-bold text-slate-800 truncate leading-tight">
                         {tx.title}
                       </p>
-                      <div
-                        className="flex items-center flex-wrap gap-1.5 mt-0.5 text-xs tabular-nums"
-                        style={{ color: 'var(--pk-muted)' }}
-                      >
-                        <span
-                          className="px-1.5 py-0.5 rounded-md font-semibold"
-                          style={{
-                            background: tx.paidThisMonth
-                              ? 'var(--pk-success-soft)'
-                              : 'var(--pk-soft)',
-                            color: tx.paidThisMonth
-                              ? 'var(--pk-success-text)'
-                              : 'var(--pk-primary-text)',
-                          }}
-                        >
-                          {tx.paidThisMonth ? 'Paid' : schemeLabel}
-                        </span>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400">
                         <span>{tx.date}</span>
-                        {isInst && <span>· {formatIDR(tx.amount)}</span>}
+                        <span>•</span>
+                        <span className="font-semibold text-rose-600">
+                          {isInstallment ? `${tx.tenor} mo plan` : 'Full Payment'}
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right tabular-nums">
-                      <p
-                        className="text-sm font-bold leading-snug"
-                        style={{ color: 'var(--pk-text)' }}
-                      >
-                        {formatIDR(monthlyAmt)}
-                      </p>
-                      {isInst && (
-                        <p className="text-xs leading-none" style={{ color: 'var(--pk-muted)' }}>
-                          /mo
-                        </p>
-                      )}
+                  <div className="flex items-center gap-2 pl-2 shrink-0">
+                    <div className="text-right">
+                      <div className="text-xs font-black text-slate-800">
+                        {formatIDR(monthly)}
+                        {isInstallment && <span className="text-[10px] text-slate-400 font-normal">/mo</span>}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Total {formatIDR(tx.amount)}
+                      </div>
                     </div>
-                    <ChevronDown
-                      className={`w-4 h-4 shrink-0 transition-transform duration-150 ${
-                        isExpanded ? 'rotate-180' : ''
-                      }`}
-                      style={{ color: 'var(--pk-muted)' }}
-                    />
+                    {isExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    )}
                   </div>
-                </button>
+                </div>
 
+                {/* Expanded Details Panel */}
                 {isExpanded && (
-                  <div
-                    className="px-3.5 pb-3.5 pt-2.5 border-t space-y-2.5"
-                    style={{
-                      borderColor: 'var(--pk-border)',
-                      background: 'var(--pk-bg)',
-                    }}
-                  >
-                    <div className="flex items-center justify-between text-xs tabular-nums">
-                      <span style={{ color: 'var(--pk-muted)' }}>
-                        Plan · Total {formatIDR(tx.amount)}
+                  <div className="px-4 pb-4 pt-1 border-t border-rose-50 bg-rose-50/20 text-xs">
+                    {/* Tenor Selector */}
+                    <div className="mb-3">
+                      <span className="text-[11px] font-semibold text-slate-500 block mb-1.5">
+                        Plan Tenor:
                       </span>
-                      <span className="font-semibold" style={{ color: 'var(--pk-text)' }}>
-                        {isInst && tx.tenor
-                          ? `Installment ${(tx.installmentPaidCount || 0) + 1}/${tx.tenor}`
-                          : 'Full payment (1x)'}
-                      </span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[1, 3, 6, 12].map((m) => {
+                          const active =
+                            m === 1
+                              ? tx.ccMode === 'full' || tx.tenor === 1
+                              : tx.ccMode === 'installment' && tx.tenor === m;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => handleTenorChange(tx, m)}
+                              className={`py-1.5 rounded-xl font-bold transition-all min-h-[38px] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500 ${
+                                active
+                                  ? 'bg-rose-500 text-white shadow-2xs'
+                                  : 'bg-white border border-rose-200/60 text-slate-600 hover:bg-rose-50'
+                              }`}
+                            >
+                              {m === 1 ? 'Full' : `${m} mo`}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setCcScheme(tx.id, 'full', 1)}
-                        className={`${
-                          !isInst ? 'btn-primary' : 'btn-surface'
-                        } min-h-[44px] py-1.5 rounded-xl text-xs font-semibold border`}
-                        style={{
-                          background: !isInst ? undefined : 'var(--pk-soft)',
-                          color: !isInst ? '#ffffff' : 'var(--pk-muted)',
-                          borderColor: !isInst ? undefined : 'var(--pk-border)',
-                        }}
-                      >
-                        Full
-                      </button>
-                      {[3, 6, 12].map((tenor) => {
-                        const active = isInst && tx.tenor === tenor;
-                        return (
-                          <button
-                            key={tenor}
-                            type="button"
-                            onClick={() => setCcScheme(tx.id, 'installment', tenor)}
-                            className={`${
-                              active ? 'btn-primary' : 'btn-surface'
-                            } min-h-[44px] py-1.5 rounded-xl text-xs font-semibold border`}
-                            style={{
-                              background: active ? undefined : 'var(--pk-soft)',
-                              color: active ? '#ffffff' : 'var(--pk-muted)',
-                              borderColor: active ? undefined : 'var(--pk-border)',
-                            }}
-                          >
-                            {tenor} mo
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {/* Installment Progress */}
+                    {isInstallment && (
+                      <div className="mb-3">
+                        <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                          <span>
+                            Progress: {paidCount} of {totalTenor} months paid
+                          </span>
+                          <span>{Math.round((paidCount / totalTenor) * 100)}%</span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className="h-full bg-rose-500 rounded-full"
+                            style={{ width: `${(paidCount / totalTenor) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
 
-                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                    {/* Paid This Month Toggle */}
+                    <div className="flex items-center justify-between pt-2 border-t border-rose-100/60">
+                      <span className="text-[11px] text-slate-500">
+                        Status this month:
+                      </span>
                       <button
                         type="button"
-                        onClick={() => onEditTransaction(tx)}
-                        className="btn-plain text-xs font-semibold min-h-[44px] px-2.5 rounded-xl"
-                        style={{ color: 'var(--pk-muted)' }}
+                        onClick={() => togglePaidStatus(tx)}
+                        className={`px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-colors min-h-[38px] ${
+                          isSettled
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                        }`}
                       >
-                        Edit Tx
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleCcPaid(tx.id)}
-                        className={`${
-                          tx.paidThisMonth ? 'btn-surface' : 'btn-primary'
-                        } min-h-[44px] px-4 rounded-xl text-xs font-semibold border`}
-                        style={{
-                          background: tx.paidThisMonth
-                            ? 'var(--pk-success-soft)'
-                            : undefined,
-                          color: tx.paidThisMonth
-                            ? 'var(--pk-success-text)'
-                            : '#ffffff',
-                          borderColor: tx.paidThisMonth ? '#a7dfca' : undefined,
-                        }}
-                      >
-                        {tx.paidThisMonth
-                          ? 'Mark Unpaid'
-                          : `Pay (${formatIDR(monthlyAmt)})`}
+                        {isSettled ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Paid</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Pending</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
                 )}
               </div>
             );
-          })
-        ) : settledFullCount > 0 ? (
-          <div
-            className="text-center py-6 px-4 rounded-2xl border space-y-2"
-            style={{
-              background: 'var(--pk-card)',
-              borderColor: 'var(--pk-border)',
-            }}
-          >
-            <p className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
-              All full bills settled ({settledFullCount} in Activity).
-            </p>
-            <button
-              type="button"
-              onClick={() => setActiveTab('transactions')}
-              className="btn-surface min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold border"
-              style={{
-                background: 'var(--pk-primary-soft)',
-                color: 'var(--pk-primary-text)',
-                borderColor: '#e6acc5',
-              }}
-            >
-              View Activity
-            </button>
-          </div>
-        ) : (
-          <div
-            className="text-center py-8 px-4 rounded-2xl border space-y-2.5"
-            style={{
-              background: 'var(--pk-card)',
-              borderColor: 'var(--pk-border)',
-            }}
-          >
-            <p className="text-xs" style={{ color: 'var(--pk-muted)' }}>
-              No CC bills yet.
-            </p>
-            <button
-              type="button"
-              onClick={onOpenAddModal}
-              className="btn-primary min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold"
-            >
-              Add CC Bill
-            </button>
-          </div>
-        )}
-
-        {activeCcItems.length > 0 && settledFullCount > 0 && (
-          <p className="text-xs text-center pt-1" style={{ color: 'var(--pk-muted)' }}>
-            {settledFullCount} paid full bill{settledFullCount > 1 ? 's' : ''} moved to Activity
-          </p>
-        )}
+          })}
+        </div>
       </div>
     </div>
   );

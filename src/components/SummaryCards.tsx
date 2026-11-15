@@ -1,6 +1,7 @@
 import React from 'react';
 import { useFinTrack } from '../context/FinTrackContext';
 import { formatIDR } from '../utils/formatters';
+import { TrendingUp, Wallet } from 'lucide-react';
 
 interface SummaryCardsProps {
   onOpenCashModal: () => void;
@@ -10,43 +11,60 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ onOpenCashModal }) =
   const { metrics, cashBalance, setActiveTab } = useFinTrack();
 
   const isPositivePL = metrics.totalAssetPL >= 0;
-  const afterCc = cashBalance - metrics.ccDueUnpaid;
+  const cashAfterCc = cashBalance - metrics.ccDueUnpaid;
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 px-5 mb-5">
       {/* Total Assets Card */}
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setActiveTab('assets')}
-        className="btn-surface text-left rounded-2xl p-3.5 border transition-all"
-        style={{
-          background: 'var(--pk-card)',
-          borderColor: 'var(--pk-border)',
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setActiveTab('assets');
+          }
         }}
+        className="w-full text-left bg-gradient-to-br from-rose-500 via-rose-600 to-pink-700 text-white p-5 rounded-3xl shadow-sm relative overflow-hidden transition-all duration-150 active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-rose-600 cursor-pointer"
       >
-        <div className="flex items-center justify-between gap-1">
-          <span className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
-            Total Assets
-          </span>
-          <span
-            className="text-xs font-semibold tabular-nums"
-            style={{
-              color: isPositivePL ? 'var(--pk-success-text)' : 'var(--pk-error-text)',
-            }}
-          >
-            {isPositivePL ? '+' : ''}
-            {metrics.totalAssetPLPct.toFixed(1)}%
-          </span>
-        </div>
-        <p className="text-[15px] font-bold tabular-nums tracking-tight leading-snug mt-1">
-          {formatIDR(metrics.totalAsset)}
-        </p>
-        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--pk-muted)' }}>
-          Stocks &amp; Gold
-        </p>
-      </button>
+        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none" />
 
-      {/* Total Cash Card */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-white/15 text-white">
+              <TrendingUp className="w-4 h-4" />
+            </span>
+            <span className="text-xs font-semibold tracking-wider text-rose-100 uppercase">
+              Total Assets
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-white/20 text-white backdrop-blur-xs">
+            <span>
+              {isPositivePL ? '+' : ''}
+              {metrics.totalAssetPLPct.toFixed(1)}%
+            </span>
+          </div>
+        </div>
+
+        <div className="text-2xl font-black tracking-tight mb-3">
+          {formatIDR(metrics.totalAsset)}
+        </div>
+
+        <div className="flex items-center justify-between pt-3 border-t border-white/15 text-xs text-rose-100">
+          <div>
+            <span className="opacity-75">Stocks: </span>
+            <span className="font-semibold text-white">{formatIDR(metrics.stockValue)}</span>
+          </div>
+          <div>
+            <span className="opacity-75">Gold: </span>
+            <span className="font-semibold text-white">{formatIDR(metrics.totalGoldVal)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Total Cash Card (Clickable to Edit Cash) */}
       <div
         role="button"
         tabIndex={0}
@@ -57,75 +75,34 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ onOpenCashModal }) =
             onOpenCashModal();
           }
         }}
-        aria-label={`Total Cash ${formatIDR(cashBalance)}, tap to edit`}
-        className="btn-tactile btn-surface text-left rounded-2xl p-3.5 border cursor-pointer"
-        style={{
-          background: 'var(--pk-card)',
-          borderColor: 'var(--pk-border)',
-        }}
+        className="w-full text-left bg-white p-5 rounded-3xl border border-rose-200/80 shadow-xs relative overflow-hidden transition-all duration-150 active:scale-[0.985] hover:border-rose-300 focus-visible:outline-2 focus-visible:outline-rose-500 cursor-pointer"
       >
-        <div className="flex items-center justify-between gap-1">
-          <span className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
-            Total Cash
-          </span>
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-lg"
-            style={{
-              background: 'var(--pk-soft)',
-              color: 'var(--pk-primary-text)',
-            }}
-          >
-            Edit
-          </span>
-        </div>
-
-        <p className="text-[15px] font-bold tabular-nums tracking-tight leading-snug mt-1">
-          {formatIDR(cashBalance)}
-        </p>
-
-        <div className="flex items-center justify-between gap-1 mt-0.5 text-xs tabular-nums leading-snug">
-          <span style={{ color: 'var(--pk-muted)' }}>
-            Due: {formatIDR(metrics.ccDueUnpaid)}
-          </span>
-          {metrics.ccDueUnpaid > 0 ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveTab('cc');
-              }}
-              className="btn-plain font-semibold shrink-0"
-              style={{ color: 'var(--pk-primary-text)' }}
-            >
-              Pay
-            </button>
-          ) : (
-            <span
-              className="font-semibold shrink-0"
-              style={{ color: 'var(--pk-success-text)' }}
-            >
-              Paid
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-rose-50 text-rose-600">
+              <Wallet className="w-4 h-4" />
             </span>
+            <span className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+              Total Cash
+            </span>
+          </div>
+
+          {metrics.ccDueUnpaid > 0 && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60">
+              <span>After CC:</span>
+              <span className="font-bold">{formatIDR(cashAfterCc)}</span>
+            </div>
           )}
         </div>
 
-        {metrics.ccDueUnpaid > 0 && (
-          <p
-            className="text-xs mt-0.5 tabular-nums leading-snug"
-            style={{
-              color: afterCc < 0 ? 'var(--pk-error-text)' : 'var(--pk-muted)',
-            }}
-          >
-            After CC:{' '}
-            <strong
-              style={{
-                color: afterCc < 0 ? 'var(--pk-error-text)' : 'var(--pk-text)',
-              }}
-            >
-              {formatIDR(afterCc)}
-            </strong>
-          </p>
-        )}
+        <div className="text-2xl font-black text-slate-800 tracking-tight">
+          {formatIDR(cashBalance)}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
+          <span className="text-slate-400">Available bank & cash balance</span>
+          <span className="text-rose-600 font-medium hover:underline">Tap to adjust</span>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,4 @@
 import React from 'react';
-import { useFinTrack } from '../context/FinTrackContext';
-import type { ActiveTab } from '../types';
 import { Sparkles, SlidersHorizontal } from 'lucide-react';
 
 interface TopHeaderProps {
@@ -8,18 +6,10 @@ interface TopHeaderProps {
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenCategories }) => {
-  const { activeTab, setActiveTab } = useFinTrack();
-
-  const tabs: { key: ActiveTab; label: string }[] = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'transactions', label: 'Activity' },
-    { key: 'cc', label: 'Cards' },
-    { key: 'assets', label: 'Assets' },
-  ];
-
   return (
-    <header className="px-5 pt-6 pb-2">
-      <div className="flex items-center justify-between mb-5">
+    <header className="px-5 pt-6 pb-3">
+      {/* User greeting and top action */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="relative">
             <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-rose-500 to-pink-300 p-0.5 shadow-sm">
@@ -47,26 +37,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenCategories }) => {
           <SlidersHorizontal className="w-4 h-4" />
         </button>
       </div>
-
-      <nav className="flex items-center gap-1.5 p-1 bg-white/80 backdrop-blur-md rounded-2xl border border-rose-200/60 shadow-xs">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all duration-150 min-h-[44px] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500 ${
-                isActive
-                  ? 'bg-rose-500 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-rose-600 hover:bg-rose-50/50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </nav>
     </header>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FinTrackProvider, useFinTrack } from './context/FinTrackContext';
+import { TopHeader } from './components/TopHeader';
 import { SummaryCards } from './components/SummaryCards';
 import { SpendingChart } from './components/SpendingChart';
 import { TransactionList } from './components/TransactionList';
@@ -14,7 +15,8 @@ import { CashModal } from './components/modals/CashModal';
 import { CategoryModal } from './components/modals/CategoryModal';
 import { AssetModal } from './components/modals/AssetModal';
 
-import type { Transaction } from './types';
+import type { Transaction, ActiveTab } from './types';
+import { LayoutDashboard, History, CreditCard, TrendingUp, Plus } from 'lucide-react';
 
 const FinTrackApp: React.FC = () => {
   const { activeTab, setActiveTab, metrics } = useFinTrack();
@@ -39,59 +41,29 @@ const FinTrackApp: React.FC = () => {
     setIsTxModalOpen(true);
   };
 
-  return (
-    <div className="min-h-screen bg-[#f7eef3] flex justify-center selection:bg-rose-100 selection:text-rose-600">
-      {/* Mobile Frame (Exact 1:1 match with prototype) */}
-      <div className="pink-phone w-full max-w-[420px] min-h-screen sm:min-h-[844px] flex flex-col relative sm:my-auto sm:rounded-[40px] sm:shadow-2xl sm:border sm:border-[#ead4df] overflow-hidden">
-        
-        {/* iOS Status Bar */}
-        <header
-          className="px-6 pt-3 pb-2 flex items-center justify-between text-xs font-semibold select-none shrink-0"
-          style={{ background: 'var(--pk-bg)', color: 'var(--pk-text)' }}
-        >
-          <span className="tabular-nums">09:41</span>
-          <div
-            className="w-24 h-5 rounded-full bg-[#1e151b] flex items-center justify-end pr-2"
-            aria-hidden="true"
-          >
-            <div className="w-2 h-2 rounded-full bg-[#4a3746]" />
-          </div>
-          <div className="flex items-center gap-1.5" aria-hidden="true">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2 20h20V4L2 20z" />
-            </svg>
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="2" y="7" width="18" height="10" rx="2" />
-              <path d="M22 11v2" />
-            </svg>
-          </div>
-        </header>
+  const navItems: { key: ActiveTab; label: string; icon: React.FC<{ className?: string }> }[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { key: 'activity', label: 'Activity', icon: History },
+  ];
 
-        {/* Scrollable Main Content */}
-        <main className="flex-1 overflow-y-auto phone-scroll px-4 pb-28 space-y-4">
+  const rightNavItems: { key: ActiveTab; label: string; icon: React.FC<{ className?: string }> }[] = [
+    { key: 'cc', label: 'Cards', icon: CreditCard },
+    { key: 'assets', label: 'Assets', icon: TrendingUp },
+  ];
+
+  return (
+    <div className="min-h-screen bg-rose-50/50 flex justify-center selection:bg-rose-100 selection:text-rose-600">
+      {/* Mobile constrained frame */}
+      <div className="w-full max-w-md min-h-screen bg-[#fff9fb] border-x border-rose-200/60 shadow-xl flex flex-col relative pb-28">
+        {/* Top Header (User greeting, avatar, settings icon) */}
+        <TopHeader onOpenCategories={() => setIsCategoryModalOpen(true)} />
+
+        {/* Dynamic Tab Content */}
+        <main className="flex-1 mt-1">
           {activeTab === 'dashboard' && (
             <>
-              {/* Dashboard Header */}
-              <div className="pt-3">
-                <p className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
-                  November 2026
-                </p>
-                <h2 className="text-xl font-bold tracking-tight leading-tight">Overview</h2>
-              </div>
-
-              {/* 2 Summary Cards: Total Assets & Total Cash */}
               <SummaryCards onOpenCashModal={() => setIsCashModalOpen(true)} />
-
-              {/* Monthly Spending & Wide Chart */}
               <SpendingChart />
-
-              {/* Recent 3 Transactions */}
               <TransactionList
                 onEditTransaction={handleEditTx}
                 onOpenAddModal={handleOpenAddTx}
@@ -100,7 +72,7 @@ const FinTrackApp: React.FC = () => {
             </>
           )}
 
-          {activeTab === 'transactions' && (
+          {activeTab === 'activity' && (
             <TransactionList
               onEditTransaction={handleEditTx}
               onOpenAddModal={handleOpenAddTx}
@@ -112,8 +84,6 @@ const FinTrackApp: React.FC = () => {
             <CreditCardTab
               onOpenLimitModal={() => setIsLimitModalOpen(true)}
               onOpenDueDateModal={() => setIsDueDateModalOpen(true)}
-              onEditTransaction={handleEditTx}
-              onOpenAddModal={handleOpenAddTx}
             />
           )}
 
@@ -122,161 +92,64 @@ const FinTrackApp: React.FC = () => {
           )}
         </main>
 
-        {/* Bottom Tab Bar (Exact 1:1 Solid High-Contrast iOS Navigation) */}
+        {/* Bottom Navigation Bar */}
         <nav
-          aria-label="Main navigation"
-          className="fixed bottom-0 max-w-[420px] w-full px-2 pt-1.5 pb-4 flex items-center justify-around z-20 border-t sm:absolute"
-          style={{
-            background: 'var(--pk-card)',
-            borderColor: 'var(--pk-border)',
-          }}
+          aria-label="Main Navigation"
+          className="fixed bottom-0 max-w-md w-full bg-white/95 backdrop-blur-md border-t border-rose-200/80 px-3 py-2 flex items-center justify-around z-30 shadow-lg"
         >
-          {/* 1. Home / Dashboard */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('dashboard')}
-            data-active={activeTab === 'dashboard'}
-            className="nav-btn min-w-[56px] min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-xl text-xs font-semibold"
-            style={{
-              color: activeTab === 'dashboard' ? 'var(--pk-primary-text)' : 'var(--pk-muted)',
-            }}
-          >
-            <span className="nav-pill px-3 py-1 rounded-full flex items-center justify-center">
-              <svg
-                className="w-5 h-5"
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          {navItems.map((item) => {
+            const active = activeTab === item.key;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActiveTab(item.key)}
+                className={`flex-1 py-1 flex flex-col items-center justify-center gap-1 transition-all min-h-[44px] ${
+                  active ? 'text-rose-600 font-bold scale-105' : 'text-slate-400 hover:text-slate-600'
+                }`}
               >
-                <rect x="3" y="3" width="7" height="9" rx="1.5" />
-                <rect x="14" y="3" width="7" height="5" rx="1.5" />
-                <rect x="14" y="12" width="7" height="9" rx="1.5" />
-                <rect x="3" y="16" width="7" height="5" rx="1.5" />
-              </svg>
-            </span>
-            <span>Home</span>
-          </button>
+                <Icon className={`w-5 h-5 ${active ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+                <span className="text-[10px] tracking-tight">{item.label}</span>
+              </button>
+            );
+          })}
 
-          {/* 2. Activity / Transactions */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('transactions')}
-            data-active={activeTab === 'transactions'}
-            className="nav-btn min-w-[56px] min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-xl text-xs font-semibold"
-            style={{
-              color: activeTab === 'transactions' ? 'var(--pk-primary-text)' : 'var(--pk-muted)',
-            }}
-          >
-            <span className="nav-pill px-3 py-1 rounded-full flex items-center justify-center">
-              <svg
-                className="w-5 h-5"
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M8 6h13" />
-                <path d="M8 12h13" />
-                <path d="M8 18h13" />
-                <path d="M3 6h.01" />
-                <path d="M3 12h.01" />
-                <path d="M3 18h.01" />
-              </svg>
-            </span>
-            <span>Activity</span>
-          </button>
-
-          {/* 3. Center FAB Add Button */}
-          <button
-            type="button"
-            onClick={handleOpenAddTx}
-            aria-label="Add transaction"
-            className="fab-plus flex items-center justify-center w-14 h-14 -mt-5 rounded-full border-4 text-white"
-            style={{ borderColor: 'var(--pk-card)' }}
-          >
-            <svg
-              className="w-7 h-7"
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
+          {/* Center Floating Plus Button */}
+          <div className="flex-1 flex justify-center">
+            <button
+              type="button"
+              onClick={handleOpenAddTx}
+              aria-label="Add New Transaction"
+              className="-mt-7 w-13 h-13 rounded-full bg-gradient-to-tr from-rose-600 to-pink-500 hover:from-rose-500 hover:to-pink-400 text-white shadow-lg shadow-rose-500/30 flex items-center justify-center border-4 border-[#fff9fb] transition-all hover:scale-105 active:scale-95 focus-visible:outline-2 focus-visible:outline-rose-500"
             >
-              <path d="M12 5v14" />
-              <path d="M5 12h14" />
-            </svg>
-          </button>
+              <Plus className="w-6 h-6 stroke-[2.5]" />
+            </button>
+          </div>
 
-          {/* 4. Cards */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('cc')}
-            data-active={activeTab === 'cc'}
-            className="nav-btn min-w-[56px] min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-xl text-xs font-semibold relative"
-            style={{
-              color: activeTab === 'cc' ? 'var(--pk-primary-text)' : 'var(--pk-muted)',
-            }}
-          >
-            <span className="nav-pill px-3 py-1 rounded-full flex items-center justify-center">
-              <svg
-                className="w-5 h-5"
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          {rightNavItems.map((item) => {
+            const active = activeTab === item.key;
+            const Icon = item.icon;
+            const hasBadge = item.key === 'cc' && metrics.ccDueUnpaid > 0;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActiveTab(item.key)}
+                className={`flex-1 py-1 flex flex-col items-center justify-center gap-1 transition-all min-h-[44px] relative ${
+                  active ? 'text-rose-600 font-bold scale-105' : 'text-slate-400 hover:text-slate-600'
+                }`}
               >
-                <rect x="2" y="5" width="20" height="14" rx="2.5" />
-                <path d="M2 10h20" />
-              </svg>
-            </span>
-            <span>Cards</span>
-            {metrics.ccDueUnpaid > 0 && (
-              <span
-                className="absolute top-1.5 right-3 w-2 h-2 rounded-full"
-                style={{ background: 'var(--pk-primary)' }}
-                aria-hidden="true"
-              />
-            )}
-          </button>
-
-          {/* 5. Assets */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('assets')}
-            data-active={activeTab === 'assets'}
-            className="nav-btn min-w-[56px] min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-xl text-xs font-semibold"
-            style={{
-              color: activeTab === 'assets' ? 'var(--pk-primary-text)' : 'var(--pk-muted)',
-            }}
-          >
-            <span className="nav-pill px-3 py-1 rounded-full flex items-center justify-center">
-              <svg
-                className="w-5 h-5"
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 3v18h18" />
-                <path d="m19 9-5 5-4-4-3 3" />
-              </svg>
-            </span>
-            <span>Assets</span>
-          </button>
+                <div className="relative">
+                  <Icon className={`w-5 h-5 ${active ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+                  {hasBadge && (
+                    <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-rose-500" />
+                  )}
+                </div>
+                <span className="text-[10px] tracking-tight">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         {/* Modals Container */}

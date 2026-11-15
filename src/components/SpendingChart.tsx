@@ -69,10 +69,6 @@ export const SpendingChart: React.FC = () => {
   const isMonth = chartMode === 'month';
   const showOct = !isMonth && compareOct;
 
-  const diff = metrics.thisMonthTotal - metrics.lastMonthTotal;
-  const diffPct = metrics.lastMonthTotal > 0 ? (diff / metrics.lastMonthTotal) * 100 : 0;
-  const isSaving = diff <= 0;
-
   const items = isMonth
     ? [
         ...monthlyHistory,
@@ -126,259 +122,174 @@ export const SpendingChart: React.FC = () => {
   const prevIdx = selIdx - 1;
   const prevSamePeriod = prevIdx >= 0 ? curVals[prevIdx] : null;
 
-  const n = labels.length;
-  const colW = svgW / n;
-
-  const calloutStyle =
-    selIdx === 0
-      ? { left: 0 }
-      : selIdx === n - 1
-      ? { right: 0 }
-      : selIdx < n / 2
-      ? { left: `${Math.max(4, Math.round((selIdx / (n - 1)) * 22))}%` }
-      : { right: `${Math.max(4, Math.round(((n - 1 - selIdx) / (n - 1)) * 22))}%` };
-
-  const selectPoint = (i: number) => {
+  const onSelectPoint = (idx: number) => {
     if (isMonth) {
-      setSelectedMonthIdx(i);
+      setSelectedMonthIdx(idx);
     } else {
-      setSelectedWeekIdx(i);
+      setSelectedWeekIdx(idx);
     }
   };
 
-  const topPct = (padTop / svgH) * 100;
-  const midPct = ((padTop + innerH / 2) / svgH) * 100;
-  const botPct = (baseY / svgH) * 100;
+  const colW = svgW / labels.length;
 
   return (
-    <section
-      aria-label="Monthly spending comparison"
-      className="rounded-2xl p-4 border space-y-3.5"
-      style={{
-        background: 'var(--pk-card)',
-        borderColor: 'var(--pk-border)',
-      }}
-    >
-      <div className="flex items-start justify-between gap-2">
+    <div className="bg-white mx-5 mb-5 p-5 rounded-3xl border border-rose-200/80 shadow-xs">
+      {/* Header with Title and Mode Switcher */}
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <p
-            className="text-xs font-semibold uppercase tracking-wider"
-            style={{ color: 'var(--pk-muted)' }}
-          >
-            SPENDING
-          </p>
-          <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5 leading-snug">
+          <span className="text-xs font-bold tracking-wider text-slate-400 uppercase">
+            Spending
+          </span>
+          <div className="text-xl font-black text-slate-800 tracking-tight">
             {formatIDR(metrics.thisMonthTotal)}
-          </p>
-        </div>
-        <span
-          className="text-xs font-semibold px-2.5 py-1 rounded-lg tabular-nums shrink-0"
-          style={{
-            background: isSaving ? 'var(--pk-success-soft)' : 'var(--pk-error-soft)',
-            color: isSaving ? 'var(--pk-success-text)' : 'var(--pk-error-text)',
-          }}
-        >
-          {isSaving ? 'Down' : 'Up'} {Math.abs(diffPct).toFixed(1)}%
-        </span>
-      </div>
-
-      {/* Comparison Strip */}
-      <div
-        className="flex items-center justify-between gap-2 text-xs py-2.5 px-3 rounded-xl"
-        style={{ background: 'var(--pk-soft)' }}
-      >
-        <span style={{ color: 'var(--pk-muted)' }}>
-          Last month:{' '}
-          <strong className="tabular-nums font-semibold" style={{ color: 'var(--pk-text)' }}>
-            {formatIDR(metrics.lastMonthTotal)}
-          </strong>
-        </span>
-        <span
-          className="font-semibold tabular-nums shrink-0"
-          style={{
-            color: isSaving ? 'var(--pk-success-text)' : 'var(--pk-error-text)',
-          }}
-        >
-          {isSaving ? '-' : '+'}
-          {formatIDR(Math.abs(diff))}
-        </span>
-      </div>
-
-      {/* Chart Block */}
-      <div className="pt-1 space-y-2.5">
-        <div className="flex items-center justify-between gap-2 h-7">
-          <h3 className="text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--pk-text)' }}>
-            {isMonth ? 'Monthly Trend' : 'Weekly Trend'}
-          </h3>
-          {!isMonth ? (
-            <button
-              type="button"
-              onClick={() => setCompareOct(!compareOct)}
-              className="week-tab h-7 inline-flex items-center px-2.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors"
-              style={{
-                background: showOct ? 'var(--pk-primary-soft)' : 'var(--pk-soft)',
-                color: showOct ? 'var(--pk-primary-text)' : 'var(--pk-muted)',
-              }}
-            >
-              {showOct ? 'Showing vs Oct' : '+ vs Oct'}
-            </button>
-          ) : (
-            <span
-              className="h-7 inline-flex items-center px-2.5 rounded-full text-xs font-medium whitespace-nowrap"
-              style={{ background: 'var(--pk-soft)', color: 'var(--pk-muted)' }}
-            >
-              6 months
-            </span>
-          )}
+          </div>
         </div>
 
-        {/* Mode Switcher: Week | Month */}
-        <div className="p-1 rounded-xl grid grid-cols-2 gap-1" style={{ background: 'var(--pk-soft)' }}>
+        <div className="flex items-center gap-1 p-1 bg-rose-50/70 rounded-xl border border-rose-100">
           <button
             type="button"
             onClick={() => setChartMode('week')}
-            className={`week-tab py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              !isMonth ? 'is-active' : ''
+            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all min-h-[36px] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500 ${
+              !isMonth ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
             }`}
-            style={{
-              background: !isMonth ? 'var(--pk-card)' : 'transparent',
-              color: !isMonth ? 'var(--pk-text)' : 'var(--pk-muted)',
-              boxShadow: !isMonth ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-            }}
           >
             Week
           </button>
           <button
             type="button"
             onClick={() => setChartMode('month')}
-            className={`week-tab py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              isMonth ? 'is-active' : ''
+            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all min-h-[36px] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500 ${
+              isMonth ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
             }`}
-            style={{
-              background: isMonth ? 'var(--pk-card)' : 'transparent',
-              color: isMonth ? 'var(--pk-primary-text)' : 'var(--pk-muted)',
-              boxShadow: isMonth ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-            }}
           >
             Month
           </button>
         </div>
+      </div>
 
-        {/* Wide Grid-Locked Chart (Ultra-compact Y-axis + edge-to-edge plot) */}
-        <div className="grid grid-cols-[28px_1fr] gap-x-0.5 -mx-1 pt-1">
-          <div
-            className="relative h-[144px] text-right text-xs tabular-nums leading-none whitespace-nowrap select-none"
-            style={{ color: 'var(--pk-muted)' }}
+      {/* Comparison Toggle (Only in Week mode) */}
+      {!isMonth && (
+        <div className="flex items-center justify-between pb-2 mb-2 text-xs border-b border-rose-100/60">
+          <span className="text-slate-500">Compare with October:</span>
+          <button
+            type="button"
+            onClick={() => setCompareOct(!compareOct)}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors min-h-[32px] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500 ${
+              compareOct
+                ? 'bg-rose-500 text-white'
+                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+            }`}
           >
-            <span className="absolute right-0.5 -translate-y-1/2" style={{ top: `${topPct}%` }}>
-              {formatShortAxis(maxVal)}
-            </span>
-            <span className="absolute right-0.5 -translate-y-1/2" style={{ top: `${midPct}%` }}>
-              {formatShortAxis(midVal)}
-            </span>
-            <span className="absolute right-0.5 -translate-y-1/2" style={{ top: `${botPct}%` }}>
-              0
-            </span>
+            {compareOct ? 'Comparing Oct' : '+ Compare Oct'}
+          </button>
+        </div>
+      )}
+
+      {/* Chart Layout: Left Y-ticks + Center SVG */}
+      <div className="relative flex">
+        {/* Short Y-Axis Labels */}
+        <div className="w-8 shrink-0 flex flex-col justify-between text-[11px] font-medium text-slate-400 py-1 select-none text-right pr-1">
+          <span>{formatShortAxis(maxVal)}</span>
+          <span>{formatShortAxis(midVal)}</span>
+          <span>0</span>
+        </div>
+
+        {/* SVG Container with Callout */}
+        <div className="relative flex-1">
+          {/* Active Floating Callout */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10 pointer-events-none inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-rose-200/80 bg-white/95 text-xs tabular-nums whitespace-nowrap shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+            <strong className="text-slate-800">
+              {labels[selIdx]}: {formatIDR(selCur)}
+            </strong>
+            {showOct ? (
+              <span className="text-slate-400 ml-1">Oct {formatIDR(selOct)}</span>
+            ) : prevSamePeriod !== null ? (
+              <span
+                className={`ml-1 font-semibold ${
+                  selCur - prevSamePeriod <= 0 ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                {selCur - prevSamePeriod > 0 ? '+' : ''}
+                {prevSamePeriod > 0
+                  ? (((selCur - prevSamePeriod) / prevSamePeriod) * 100).toFixed(1)
+                  : 0}
+                %
+              </span>
+            ) : null}
           </div>
 
-          <div className="relative">
-            {/* Callout */}
-            <div
-              className="absolute top-0 z-10 pointer-events-none inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs tabular-nums whitespace-nowrap shadow-xs"
-              style={{
-                background: 'rgba(255, 249, 251, 0.96)',
-                borderColor: 'var(--pk-border)',
-                ...calloutStyle,
-              }}
-            >
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'var(--pk-primary)' }} />
-              <strong style={{ color: 'var(--pk-text)' }}>
-                {labels[selIdx]}: {formatIDR(selCur)}
-              </strong>
-              {showOct ? (
-                <span style={{ color: 'var(--pk-muted)' }}>Oct {formatIDR(selOct)}</span>
-              ) : prevSamePeriod !== null ? (
-                <span
-                  className="font-semibold"
-                  style={{
-                    color:
-                      selCur - prevSamePeriod <= 0 ? 'var(--pk-success-text)' : 'var(--pk-error-text)',
-                  }}
-                >
-                  {selCur - prevSamePeriod > 0 ? '+' : ''}
-                  {prevSamePeriod > 0
-                    ? (((selCur - prevSamePeriod) / prevSamePeriod) * 100).toFixed(1)
-                    : 0}
-                  % vs {labels[prevIdx]}
-                </span>
-              ) : (
-                <span style={{ color: 'var(--pk-muted)' }}>{isMonth ? 'Baseline' : 'Start of Nov'}</span>
-              )}
-            </div>
+          <svg
+            viewBox={`0 0 ${svgW} ${svgH}`}
+            className="w-full h-[144px] block touch-manipulation"
+            aria-label="Spending chart"
+          >
+            <defs>
+              <linearGradient id="roseChartGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
 
-            {/* SVG Plot */}
-            <svg
-              viewBox={`0 0 ${svgW} ${svgH}`}
-              className="w-full h-[144px] block touch-manipulation"
-              aria-label="Spending comparison chart"
-            >
-              <defs>
-                <linearGradient id="roseAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#c81e68" stopOpacity="0.18" />
-                  <stop offset="100%" stopColor="#c81e68" stopOpacity="0" />
-                </linearGradient>
-              </defs>
+            {/* Grid guide lines */}
+            <line
+              x1="0"
+              y1={padTop}
+              x2={svgW}
+              y2={padTop}
+              stroke="#fee2e2"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            <line
+              x1="0"
+              y1={padTop + innerH / 2}
+              x2={svgW}
+              y2={padTop + innerH / 2}
+              stroke="#fee2e2"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            <line x1="0" y1={baseY} x2={svgW} y2={baseY} stroke="#fecdd3" strokeWidth="1" />
 
-              <line
-                x1="0"
-                y1={padTop}
-                x2={svgW}
-                y2={padTop}
-                stroke="#f1dde7"
-                strokeWidth="1"
-                strokeDasharray="3 3"
+            {/* Oct curve if comparing */}
+            {showOct && octPath && (
+              <path
+                d={octPath}
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth="1.75"
+                strokeDasharray="4 4"
+                strokeLinecap="round"
               />
-              <line
-                x1="0"
-                y1={padTop + innerH / 2}
-                x2={svgW}
-                y2={padTop + innerH / 2}
-                stroke="#f1dde7"
-                strokeWidth="1"
-                strokeDasharray="3 3"
+            )}
+
+            {/* Area gradient fill */}
+            {curArea && <path d={curArea} fill="url(#roseChartGrad)" />}
+
+            {/* Main spline curve */}
+            {curPath && (
+              <path
+                d={curPath}
+                fill="none"
+                stroke="#f43f5e"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-              <line x1="0" y1={baseY} x2={svgW} y2={baseY} stroke="#ead4df" strokeWidth="1" />
+            )}
 
-              {showOct && octPath && (
-                <path
-                  d={octPath}
-                  fill="none"
-                  stroke="#9a7d8c"
-                  strokeWidth="1.75"
-                  strokeDasharray="4 4"
-                  strokeLinecap="round"
-                />
-              )}
-
-              {curArea && <path d={curArea} fill="url(#roseAreaGrad)" />}
-
-              {curPath && (
-                <path
-                  d={curPath}
-                  fill="none"
-                  stroke="#c81e68"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              )}
-
-              {curPts.map((p, i) => (
+            {/* Interactive Data Points and Click Zones */}
+            {curPts.map((p, i) => {
+              const isSelected = i === selIdx;
+              return (
                 <g
                   key={i}
-                  onClick={() => selectPoint(i)}
+                  onClick={() => onSelectPoint(i)}
                   className="cursor-pointer"
-                  aria-hidden="true"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${labels[i]} ${formatIDR(p.val)}`}
                 >
                   <rect
                     x={(i * colW).toFixed(1)}
@@ -391,58 +302,54 @@ export const SpendingChart: React.FC = () => {
                     <circle
                       cx={p.x.toFixed(1)}
                       cy={octPts[i].y.toFixed(1)}
-                      r={i === selIdx ? 3.5 : 2.75}
+                      r={isSelected ? 3.5 : 2.5}
                       fill="#ffffff"
-                      stroke="#9a7d8c"
+                      stroke="#94a3b8"
                       strokeWidth="1.5"
                     />
                   )}
-                  {i === selIdx && (
+                  {isSelected && (
                     <circle
                       cx={p.x.toFixed(1)}
                       cy={p.y.toFixed(1)}
-                      r="9.5"
-                      fill="#c81e68"
-                      fillOpacity="0.14"
+                      r="9"
+                      fill="#f43f5e"
+                      fillOpacity="0.15"
                     />
                   )}
                   <circle
                     cx={p.x.toFixed(1)}
                     cy={p.y.toFixed(1)}
-                    r={i === selIdx ? 5 : 3.25}
-                    fill={i === selIdx ? '#c81e68' : '#ffffff'}
-                    stroke="#c81e68"
+                    r={isSelected ? 5 : 3.5}
+                    fill={isSelected ? '#f43f5e' : '#ffffff'}
+                    stroke="#f43f5e"
                     strokeWidth="2"
                   />
                 </g>
-              ))}
-            </svg>
-          </div>
-
-          <div />
-          <div className="flex items-center justify-between h-9 mt-1">
-            {labels.map((lbl, i) => {
-              const active = i === selIdx;
-              return (
-                <button
-                  key={lbl}
-                  type="button"
-                  onClick={() => selectPoint(i)}
-                  className={`week-tab w-8 h-9 rounded-full text-xs tabular-nums whitespace-nowrap flex items-center justify-center transition-colors ${
-                    active ? 'is-active font-bold' : 'font-medium'
-                  }`}
-                  style={{
-                    background: active ? 'var(--pk-primary-soft)' : 'transparent',
-                    color: active ? 'var(--pk-primary-text)' : 'var(--pk-muted)',
-                  }}
-                >
-                  {lbl}
-                </button>
               );
             })}
-          </div>
+          </svg>
         </div>
       </div>
-    </section>
+
+      {/* Bottom X-Axis Labels */}
+      <div className="flex justify-between pl-8 pr-1 pt-1 text-xs font-semibold text-slate-400">
+        {labels.map((lbl, idx) => {
+          const isSelected = idx === selIdx;
+          return (
+            <button
+              key={lbl}
+              type="button"
+              onClick={() => onSelectPoint(idx)}
+              className={`min-h-[32px] px-2 py-0.5 rounded-md transition-colors ${
+                isSelected ? 'text-rose-600 bg-rose-50 font-bold' : 'hover:text-slate-600'
+              }`}
+            >
+              {lbl}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 };
