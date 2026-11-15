@@ -12,14 +12,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenCategories }) => {
 
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: 'dashboard', label: 'Dashboard' },
-    { key: 'activity', label: 'Activity' },
+    { key: 'transactions', label: 'Activity' },
     { key: 'cc', label: 'Cards' },
     { key: 'assets', label: 'Assets' },
   ];
 
   return (
     <header className="px-5 pt-6 pb-2">
-      {/* User greeting and top actions */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -49,7 +48,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenCategories }) => {
         </button>
       </div>
 
-      {/* Navigation tabs */}
       <nav className="flex items-center gap-1.5 p-1 bg-white/80 backdrop-blur-md rounded-2xl border border-rose-200/60 shadow-xs">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.key;

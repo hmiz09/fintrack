@@ -50,5 +50,5 @@ export interface MonthlyHistoryItem {
   total: number;
 }
 
-export type ActiveTab = 'dashboard' | 'activity' | 'cc' | 'assets';
+export type ActiveTab = 'dashboard' | 'transactions' | 'cc' | 'assets';
 export type ChartMode = 'week' | 'month';

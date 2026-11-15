@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useFinTrack } from '../context/FinTrackContext';
-import { CategoryIcon } from '../constants/icons';
+import { CATEGORY_ICONS, CategoryIcon } from '../constants/icons';
 import { formatIDR } from '../utils/formatters';
 import type { Transaction } from '../types';
-import { Search, CreditCard, Plus, ChevronRight } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 interface TransactionListProps {
   onEditTransaction: (tx: Transaction) => void;
@@ -16,11 +16,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   onOpenAddModal,
   isDashboardPreview = false,
 }) => {
-  const { transactions, categories, setActiveTab } = useFinTrack();
+  const { transactions, categories, setActiveTab, metrics } = useFinTrack();
   const [search, setSearch] = useState('');
   const [filterMethod, setFilterMethod] = useState<'all' | 'cash' | 'cc'>('all');
 
-  // Category map for quick icon lookup
   const catMap = new Map(categories.map((c) => [c.name, c.icon]));
 
   const filtered = transactions.filter((t) => {
@@ -32,147 +31,239 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     return true;
   });
 
-  const displayList = isDashboardPreview ? filtered.slice(0, 3) : filtered;
+  const last3 = transactions.slice(0, 3);
 
-  return (
-    <div className="px-5 mb-8">
-      {/* Section Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-base font-bold text-slate-800">
-            {isDashboardPreview ? 'Recent Activity' : 'All Transactions'}
-          </h2>
-          <p className="text-xs text-slate-400">
-            {isDashboardPreview
-              ? 'Last 3 transactions'
-              : `${filtered.length} transactions recorded`}
-          </p>
+  const renderTxRow = (tx: Transaction, compact = false) => {
+    const isCC = tx.method === 'cc';
+    const ccLabel =
+      tx.ccMode === 'installment' && tx.tenor
+        ? `CC (${(tx.installmentPaidCount || 0) + 1}/${tx.tenor}x)`
+        : 'CC (Full)';
+    const iconKey = catMap.get(tx.category) || 'tag';
+    const palette = CATEGORY_ICONS[iconKey] || CATEGORY_ICONS.tag;
+
+    return (
+      <div
+        key={tx.id}
+        role="button"
+        tabIndex={0}
+        onClick={() => onEditTransaction(tx)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onEditTransaction(tx);
+          }
+        }}
+        aria-label={`Edit transaction ${tx.title}`}
+        className={`tx-row ${
+          compact
+            ? 'py-2.5 first:pt-0 last:pb-0 -mx-1 px-1 rounded-xl'
+            : 'p-3.5 rounded-2xl border'
+        } flex items-center justify-between gap-3 cursor-pointer`}
+        style={{
+          background: compact ? 'transparent' : 'var(--pk-card)',
+          borderColor: 'var(--pk-border)',
+        }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: palette.bg }}
+          >
+            <CategoryIcon icon={iconKey} className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate leading-snug">{tx.title}</p>
+            <div className="flex items-center flex-wrap gap-1.5 mt-0.5">
+              <span className="text-xs" style={{ color: 'var(--pk-muted)' }}>
+                {tx.date}
+              </span>
+              {isCC ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveTab('cc', tx.id);
+                  }}
+                  className="text-xs font-semibold px-2 py-0.5 rounded-md transition-opacity hover:opacity-80"
+                  style={{
+                    background: 'var(--pk-primary-soft)',
+                    color: 'var(--pk-primary-text)',
+                  }}
+                >
+                  {ccLabel}
+                </button>
+              ) : (
+                <span
+                  className="text-xs px-2 py-0.5 rounded-md font-medium"
+                  style={{
+                    background: 'var(--pk-soft)',
+                    color: 'var(--pk-muted)',
+                  }}
+                >
+                  {tx.category}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
-        {isDashboardPreview ? (
+        <div className="text-right shrink-0">
+          <span
+            className="block text-sm font-bold tabular-nums"
+            style={{ color: 'var(--pk-text)' }}
+          >
+            {formatIDR(tx.amount)}
+          </span>
+          {isCC && tx.ccMode === 'installment' && tx.tenor && (
+            <span
+              className="block text-xs tabular-nums"
+              style={{ color: 'var(--pk-muted)' }}
+            >
+              {formatIDR(Math.round(tx.amount / tx.tenor))}/mo
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  if (isDashboardPreview) {
+    return (
+      <section
+        aria-label="Recent transactions"
+        className="rounded-2xl p-4 border space-y-3"
+        style={{
+          background: 'var(--pk-card)',
+          borderColor: 'var(--pk-border)',
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Recent Transactions</h3>
           <button
             type="button"
-            onClick={() => setActiveTab('activity')}
-            className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 py-1 px-2 rounded-lg hover:bg-rose-50 transition-colors min-h-[44px]"
+            onClick={() => setActiveTab('transactions')}
+            className="text-xs font-semibold min-h-[44px] px-3 rounded-xl flex items-center"
+            style={{ color: 'var(--pk-primary-text)' }}
           >
-            <span>View All</span>
-            <ChevronRight className="w-4 h-4" />
+            See All
           </button>
+        </div>
+
+        {last3.length > 0 ? (
+          <div className="divide-y" style={{ borderColor: 'var(--pk-border)' }}>
+            {last3.map((tx) => renderTxRow(tx, true))}
+          </div>
         ) : (
-          <button
-            type="button"
-            onClick={onOpenAddModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold rounded-xl shadow-xs transition-all active:scale-95 min-h-[44px]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add New</span>
-          </button>
+          <div className="py-6 text-center space-y-2">
+            <p className="text-xs" style={{ color: 'var(--pk-muted)' }}>
+              No transactions yet.
+            </p>
+            <button
+              type="button"
+              onClick={onOpenAddModal}
+              className="btn-primary min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold"
+            >
+              Add Transaction
+            </button>
+          </div>
         )}
+      </section>
+    );
+  }
+
+  // Full Transactions History Page
+  return (
+    <div className="space-y-4">
+      <div className="pt-3">
+        <p className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
+          History
+        </p>
+        <h2 className="text-xl font-bold tracking-tight leading-tight">Transactions</h2>
       </div>
 
-      {/* Filters (Only on Activity tab) */}
-      {!isDashboardPreview && (
-        <div className="mb-4 space-y-2">
-          {/* Search bar */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <div className="space-y-2.5">
+        <div>
+          <label htmlFor="tx-search-input" className="sr-only">
+            Search transactions
+          </label>
+          <div
+            className="flex items-center gap-2 px-3.5 min-h-[44px] rounded-xl border"
+            style={{
+              background: 'var(--pk-card)',
+              borderColor: 'var(--pk-border-strong)',
+            }}
+          >
+            <Search className="w-4 h-4 shrink-0" style={{ color: 'var(--pk-muted)' }} />
             <input
+              id="tx-search-input"
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search expenses, coffee, nail art..."
-              className="w-full pl-9 pr-3 py-2 bg-white rounded-2xl border border-rose-200/80 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500 min-h-[44px]"
+              placeholder="Search merchant or category..."
+              className="w-full bg-transparent text-xs py-2 rounded-lg focus:outline-none"
             />
           </div>
-
-          {/* Filter Pills */}
-          <div className="flex items-center gap-1.5">
-            {(['all', 'cash', 'cc'] as const).map((method) => {
-              const active = filterMethod === method;
-              return (
-                <button
-                  key={method}
-                  type="button"
-                  onClick={() => setFilterMethod(method)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-colors min-h-[40px] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500 ${
-                    active
-                      ? 'bg-rose-500 text-white'
-                      : 'bg-white text-slate-600 border border-rose-200/60 hover:bg-rose-50/50'
-                  }`}
-                >
-                  {method === 'all' ? 'All Methods' : method === 'cash' ? 'Cash' : 'Credit Card'}
-                </button>
-              );
-            })}
-          </div>
         </div>
-      )}
 
-      {/* Transactions List */}
-      <div className="space-y-2">
-        {displayList.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 text-center border border-rose-200/60">
-            <p className="text-xs text-slate-500 font-medium">No transactions found</p>
-          </div>
-        ) : (
-          displayList.map((tx) => {
-            const iconName = catMap.get(tx.category) || 'tag';
-            const isCC = tx.method === 'cc';
-
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+          {[
+            { id: 'all', label: `All (${transactions.length})` },
+            { id: 'cash', label: 'Cash / Debit' },
+            { id: 'cc', label: `Credit Card (${metrics.ccItems.length})` },
+          ].map((f) => {
+            const active = filterMethod === f.id;
             return (
-              <div
-                key={tx.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onEditTransaction(tx)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onEditTransaction(tx);
-                  }
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilterMethod(f.id as any)}
+                className={`${
+                  active ? 'btn-primary' : 'btn-surface'
+                } min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold shrink-0 border`}
+                style={{
+                  background: active ? undefined : 'var(--pk-card)',
+                  color: active ? '#ffffff' : 'var(--pk-muted)',
+                  borderColor: active ? undefined : 'var(--pk-border-strong)',
                 }}
-                className="w-full flex items-center justify-between p-3.5 bg-white rounded-2xl border border-rose-100 hover:border-rose-300 shadow-2xs transition-all active:scale-[0.985] text-left cursor-pointer min-h-[58px]"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-rose-50/80 border border-rose-100 flex items-center justify-center shrink-0">
-                    <CategoryIcon icon={iconName} className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate leading-tight">
-                      {tx.title}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400">
-                      <span>{tx.date}</span>
-                      <span>•</span>
-                      <span className="truncate">{tx.category}</span>
-                      {isCC && (
-                        <>
-                          <span>•</span>
-                          <span className="inline-flex items-center gap-0.5 text-rose-600 font-semibold">
-                            <CreditCard className="w-3 h-3" />
-                            {tx.ccMode === 'installment' && tx.tenor
-                              ? `${tx.tenor} mo`
-                              : 'Full'}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0 pl-2">
-                  <div className="text-xs font-black text-slate-800">
-                    {formatIDR(tx.amount)}
-                  </div>
-                  {isCC && tx.ccMode === 'installment' && tx.tenor ? (
-                    <div className="text-[10px] text-slate-400 font-medium">
-                      {formatIDR(Math.round(tx.amount / tx.tenor))}/mo
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+                {f.label}
+              </button>
             );
-          })
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {filtered.length > 0 ? (
+          filtered.map((tx) => renderTxRow(tx, false))
+        ) : (
+          <div
+            className="text-center py-8 px-4 rounded-2xl border space-y-2.5"
+            style={{
+              background: 'var(--pk-card)',
+              borderColor: 'var(--pk-border)',
+            }}
+          >
+            <p className="text-xs font-medium" style={{ color: 'var(--pk-muted)' }}>
+              No matching transactions.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMethod('all');
+                setSearch('');
+              }}
+              className="btn-surface min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold border"
+              style={{
+                background: 'var(--pk-primary-soft)',
+                color: 'var(--pk-primary-text)',
+                borderColor: '#e6acc5',
+              }}
+            >
+              Show All
+            </button>
+          </div>
         )}
       </div>
     </div>
