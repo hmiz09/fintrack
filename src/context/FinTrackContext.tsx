@@ -95,6 +95,9 @@ interface FinTrackContextType {
   resetToZero: () => void;
   exportData: () => string;
   importData: (jsonStr: string) => boolean;
+  lastMarketSync: number | null;
+  isSyncingMarket: boolean;
+  fetchMarketPrices: () => Promise<void>;
 }
 
 const STORAGE_KEY = 'fintrack_state_v2';
@@ -133,7 +136,9 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [categories, setCategories] = useState<CategoryItem[]>(DEFAULT_CATEGORIES);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [stocks, setStocks] = useState<StockItem[]>(INITIAL_STOCKS);
-  const [goldPrices] = useState<GoldPrices>({ spot: 1425000, antam: 1540000 });
+  const [goldPrices, setGoldPricesState] = useState<GoldPrices>({ spot: 1425000, antam: 1540000 });
+  const [lastMarketSync, setLastMarketSync] = useState<number | null>(null);
+  const [isSyncingMarket, setIsSyncingMarket] = useState<boolean>(false);
   const [goldHoldings, setGoldHoldings] = useState<GoldHolding[]>(INITIAL_GOLD_HOLDINGS);
   const [monthlyHistory] = useState<MonthlyHistoryItem[]>([
     { label: 'Jun', total: 4950000 },
@@ -159,6 +164,9 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
         if (Array.isArray(parsed.stocks)) setStocks(parsed.stocks);
         if (Array.isArray(parsed.goldHoldings)) setGoldHoldings(parsed.goldHoldings);
+        if (parsed.goldPrices && typeof parsed.goldPrices.spot === 'number' && typeof parsed.goldPrices.antam === 'number') {
+          setGoldPricesState(parsed.goldPrices);
+        }
       }
     } catch {
       // Keep default on parse error
@@ -177,12 +185,13 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         transactions,
         stocks,
         goldHoldings,
+        goldPrices,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // Storage quota or error safe guard
     }
-  }, [userName, cashBalance, ccLimit, ccDueDate, categories, transactions, stocks, goldHoldings]);
+  }, [userName, cashBalance, ccLimit, ccDueDate, categories, transactions, stocks, goldHoldings, goldPrices]);
 
   const setActiveTab = (tab: ActiveTab, highlightId: string | null = null) => {
     setActiveTabState(tab);
@@ -278,7 +287,63 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCategories((prev) => prev.filter((c) => c.id !== id));
   };
 
-  const addStock = (code: string, lots: number, avgBuy: number) => {
+  const fetchMarketPrices = async () => {
+    try {
+      setIsSyncingMarket(true);
+      const stockCodes = Array.from(new Set(stocks.map((s) => s.code))).filter(Boolean);
+      const queryStr = stockCodes.length > 0 ? `?symbols=${encodeURIComponent(stockCodes.join(','))}` : '';
+      const resp = await fetch(`/api/market-prices${queryStr}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success) {
+          if (data.gold && typeof data.gold.spot === 'number' && typeof data.gold.antam === 'number') {
+            setGoldPricesState(data.gold);
+          }
+          if (data.stocks && typeof data.stocks === 'object') {
+            setStocks((prev) =>
+              prev.map((s) => {
+                const livePrice = data.stocks[s.code];
+                if (typeof livePrice === 'number' && livePrice > 0) {
+                  return { ...s, currentPrice: livePrice };
+                }
+                return s;
+              })
+            );
+          }
+          setLastMarketSync(Date.now());
+        }
+      }
+    } catch {
+      // Offline / network failure: keep current cached prices
+    } finally {
+      setIsSyncingMarket(false);
+    }
+  };
+
+  // Background auto-sync: on mount, every 60s, and when returning to app tab
+  useEffect(() => {
+    fetchMarketPrices();
+
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchMarketPrices();
+      }
+    }, 60000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMarketPrices();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [stocks.length]);
+
+  const addStock = async (code: string, lots: number, avgBuy: number) => {
     const upper = code.trim().toUpperCase();
     const currentPrice = MARKET_STOCK_PRICES[upper] || avgBuy;
     const newStock: StockItem = {
@@ -289,6 +354,22 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       currentPrice,
     };
     setStocks((prev) => [...prev, newStock]);
+
+    // Live price fetch for newly added stock
+    try {
+      const resp = await fetch(`/api/market-prices?symbols=${encodeURIComponent(upper)}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        const livePrice = data?.stocks?.[upper];
+        if (typeof livePrice === 'number' && livePrice > 0) {
+          setStocks((prev) =>
+            prev.map((s) => (s.id === newStock.id ? { ...s, currentPrice: livePrice } : s))
+          );
+        }
+      }
+    } catch {
+      // Keep initial currentPrice
+    }
   };
 
   const updateStock = (id: string, updates: Partial<StockItem>) => {
@@ -512,6 +593,9 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         resetToZero,
         exportData,
         importData,
+        lastMarketSync,
+        isSyncingMarket,
+        fetchMarketPrices,
       }}
     >
       {children}

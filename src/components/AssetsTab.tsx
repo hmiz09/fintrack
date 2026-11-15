@@ -8,6 +8,7 @@ import {
   Trash2,
   ArrowUpRight,
   ArrowDownRight,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AssetsTabProps {
@@ -15,12 +16,48 @@ interface AssetsTabProps {
 }
 
 export const AssetsTab: React.FC<AssetsTabProps> = ({ onOpenAddAsset }) => {
-  const { metrics, stocks, goldHoldings, goldPrices, deleteStock, deleteGoldHolding } =
-    useFinTrack();
+  const {
+    metrics,
+    stocks,
+    goldHoldings,
+    goldPrices,
+    deleteStock,
+    deleteGoldHolding,
+    isSyncingMarket,
+    lastMarketSync,
+    fetchMarketPrices,
+  } = useFinTrack();
   const [subTab, setSubTab] = useState<'all' | 'stocks' | 'gold'>('all');
 
   return (
     <div className="px-5 mb-8">
+      {/* Live Market Auto-Sync Status Bar */}
+      <div className="flex items-center justify-between mb-2.5 px-1">
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isSyncingMarket ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'
+            }`}
+          />
+          <span className="text-[11px] font-semibold text-slate-700">
+            {isSyncingMarket ? 'Mengambil data bursa terkini...' : 'Bursa IDX & Emas Terhubung'}
+          </span>
+          <span className="text-[10px] text-emerald-600 bg-emerald-50 font-bold px-1.5 py-0.5 rounded-full border border-emerald-200/60">
+            {lastMarketSync ? 'Live' : 'Auto'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => fetchMarketPrices()}
+          disabled={isSyncingMarket}
+          className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1 active:scale-95 disabled:opacity-50 min-h-[36px] px-2"
+          aria-label="Refresh Harga Pasar Sekarang"
+        >
+          <RefreshCw className={`w-3 h-3 ${isSyncingMarket ? 'animate-spin' : ''}`} />
+          <span>{isSyncingMarket ? 'Updating...' : 'Sync'}</span>
+        </button>
+      </div>
+
       {/* Portfolio Overview Banner */}
       <div className="bg-gradient-to-br from-rose-500 via-rose-600 to-pink-700 text-white p-5 rounded-3xl shadow-sm mb-4">
         <div className="flex items-center justify-between mb-2">
