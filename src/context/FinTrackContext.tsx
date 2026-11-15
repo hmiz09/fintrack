@@ -1,0 +1,466 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
+  DEFAULT_CATEGORIES,
+  INITIAL_GOLD_HOLDINGS,
+  INITIAL_STOCKS,
+  INITIAL_TRANSACTIONS,
+  MARKET_STOCK_PRICES,
+} from '../constants/icons';
+import type {
+  ActiveTab,
+  CategoryItem,
+  ChartMode,
+  GoldHolding,
+  GoldPrices,
+  MonthlyHistoryItem,
+  StockItem,
+  Transaction,
+} from '../types';
+
+export interface FinTrackMetrics {
+  stockValue: number;
+  stockCost: number;
+  stockPL: number;
+  goldSpotVal: number;
+  goldSpotCost: number;
+  goldSpotGrams: number;
+  goldSpotPL: number;
+  goldAntamVal: number;
+  goldAntamCost: number;
+  goldAntamGrams: number;
+  goldAntamPL: number;
+  totalGoldVal: number;
+  totalGoldPL: number;
+  totalAsset: number;
+  totalAssetCost: number;
+  totalAssetPL: number;
+  totalAssetPLPct: number;
+  thisMonthTotal: number;
+  lastMonthTotal: number;
+  thisMonthWeekly: number[];
+  ccItems: Transaction[];
+  ccDueUnpaid: number;
+  ccDueTotal: number;
+  ccUsedLimit: number;
+  ccAvailableLimit: number;
+  ccLimitPct: number;
+}
+
+interface FinTrackContextType {
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab, highlightCcId?: string | null) => void;
+  chartMode: ChartMode;
+  setChartMode: (mode: ChartMode) => void;
+  compareOct: boolean;
+  setCompareOct: (comp: boolean) => void;
+  selectedWeekIdx: number;
+  setSelectedWeekIdx: (idx: number) => void;
+  selectedMonthIdx: number;
+  setSelectedMonthIdx: (idx: number) => void;
+  cashBalance: number;
+  setCashBalance: (val: number) => void;
+  ccLimit: number;
+  setCcLimit: (val: number) => void;
+  ccDueDate: number;
+  setCcDueDate: (day: number) => void;
+  categories: CategoryItem[];
+  addCategory: (item: Omit<CategoryItem, 'id'>) => void;
+  updateCategory: (id: string, updates: Partial<CategoryItem>) => void;
+  deleteCategory: (id: string) => void;
+  transactions: Transaction[];
+  addTransaction: (tx: Omit<Transaction, 'id'>) => void;
+  updateTransaction: (tx: Transaction) => void;
+  deleteTransaction: (id: string) => void;
+  stocks: StockItem[];
+  addStock: (code: string, lots: number, avgBuy: number) => void;
+  updateStock: (id: string, updates: Partial<StockItem>) => void;
+  deleteStock: (id: string) => void;
+  goldPrices: GoldPrices;
+  goldHoldings: GoldHolding[];
+  addGoldHolding: (item: Omit<GoldHolding, 'id'>) => void;
+  updateGoldHolding: (id: string, updates: Partial<GoldHolding>) => void;
+  deleteGoldHolding: (id: string) => void;
+  monthlyHistory: MonthlyHistoryItem[];
+  lastMonthWeekly: number[];
+  expandedCcId: string | null;
+  setExpandedCcId: (id: string | null) => void;
+  highlightedCcId: string | null;
+  setHighlightedCcId: (id: string | null) => void;
+  metrics: FinTrackMetrics;
+  payAllCcDue: () => void;
+  updateCcItem: (id: string, updates: Partial<Transaction>) => void;
+  resetAllData: () => void;
+}
+
+const STORAGE_KEY = 'fintrack_state_v2';
+
+export const getTxMonthlyBill = (tx: Transaction): number => {
+  if (!tx || tx.method !== 'cc') return 0;
+  return tx.ccMode === 'installment' && tx.tenor && tx.tenor > 0
+    ? Math.round(tx.amount / tx.tenor)
+    : tx.amount;
+};
+
+export const getTxCcHold = (tx: Transaction): number => {
+  if (!tx || tx.method !== 'cc') return 0;
+  if (tx.ccMode === 'full') return tx.paidThisMonth ? 0 : tx.amount;
+  const monthly = getTxMonthlyBill(tx);
+  const paidMonths = (tx.installmentPaidCount || 0) + (tx.paidThisMonth ? 1 : 0);
+  const remaining = Math.max(0, (tx.tenor || 1) - paidMonths);
+  return remaining * monthly;
+};
+
+const FinTrackContext = createContext<FinTrackContextType | undefined>(undefined);
+
+export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [activeTab, setActiveTabState] = useState<ActiveTab>('dashboard');
+  const [chartMode, setChartMode] = useState<ChartMode>('week');
+  const [compareOct, setCompareOct] = useState(false);
+  const [selectedWeekIdx, setSelectedWeekIdx] = useState(3);
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState(5);
+  const [expandedCcId, setExpandedCcId] = useState<string | null>(null);
+  const [highlightedCcId, setHighlightedCcId] = useState<string | null>(null);
+
+  const [cashBalance, setCashBalanceState] = useState(18250000);
+  const [ccLimit, setCcLimitState] = useState(20000000);
+  const [ccDueDate, setCcDueDateState] = useState(25);
+  const [categories, setCategories] = useState<CategoryItem[]>(DEFAULT_CATEGORIES);
+  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
+  const [stocks, setStocks] = useState<StockItem[]>(INITIAL_STOCKS);
+  const [goldPrices] = useState<GoldPrices>({ spot: 1425000, antam: 1540000 });
+  const [goldHoldings, setGoldHoldings] = useState<GoldHolding[]>(INITIAL_GOLD_HOLDINGS);
+  const [monthlyHistory] = useState<MonthlyHistoryItem[]>([
+    { label: 'Jun', total: 4950000 },
+    { label: 'Jul', total: 5380000 },
+    { label: 'Aug', total: 4620000 },
+    { label: 'Sep', total: 5190000 },
+  ]);
+  const [lastMonthWeekly] = useState<number[]>([1420000, 1280000, 1510000, 1240000]);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.cashBalance === 'number') setCashBalanceState(parsed.cashBalance);
+        if (typeof parsed.ccLimit === 'number') setCcLimitState(parsed.ccLimit);
+        if (typeof parsed.ccDueDate === 'number') setCcDueDateState(parsed.ccDueDate);
+        if (Array.isArray(parsed.categories)) setCategories(parsed.categories);
+        if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
+        if (Array.isArray(parsed.stocks)) setStocks(parsed.stocks);
+        if (Array.isArray(parsed.goldHoldings)) setGoldHoldings(parsed.goldHoldings);
+      }
+    } catch {
+      // Keep default on parse error
+    }
+  }, []);
+
+  // Sync to localStorage
+  useEffect(() => {
+    try {
+      const payload = {
+        cashBalance,
+        ccLimit,
+        ccDueDate,
+        categories,
+        transactions,
+        stocks,
+        goldHoldings,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Storage quota or error safe guard
+    }
+  }, [cashBalance, ccLimit, ccDueDate, categories, transactions, stocks, goldHoldings]);
+
+  const setActiveTab = (tab: ActiveTab, highlightId: string | null = null) => {
+    setActiveTabState(tab);
+    setHighlightedCcId(highlightId);
+    setExpandedCcId(tab === 'cc' ? highlightId : null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const addTransaction = (txData: Omit<Transaction, 'id'>) => {
+    const newTx: Transaction = {
+      ...txData,
+      id: `tx-${Date.now()}`,
+    };
+    setTransactions((prev) => [newTx, ...prev]);
+    if (newTx.method === 'cash') {
+      setCashBalanceState((prev) => Math.max(0, prev - newTx.amount));
+    }
+  };
+
+  const updateTransaction = (updated: Transaction) => {
+    const old = transactions.find((t) => t.id === updated.id);
+    setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+
+    if (old) {
+      let deltaCash = 0;
+      if (old.method === 'cash') deltaCash += old.amount;
+      if (updated.method === 'cash') deltaCash -= updated.amount;
+      if (deltaCash !== 0) {
+        setCashBalanceState((prev) => Math.max(0, prev + deltaCash));
+      }
+    }
+  };
+
+  const deleteTransaction = (id: string) => {
+    const old = transactions.find((t) => t.id === id);
+    if (old && old.method === 'cash') {
+      setCashBalanceState((prev) => prev + old.amount);
+    }
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const setCashBalance = (val: number) => {
+    setCashBalanceState(Math.max(0, Math.round(val)));
+  };
+
+  const setCcLimit = (val: number) => {
+    setCcLimitState(Math.max(0, Math.round(val)));
+  };
+
+  const setCcDueDate = (day: number) => {
+    setCcDueDateState(Math.max(1, Math.min(31, Math.round(day))));
+  };
+
+  const payAllCcDue = () => {
+    let totalDeduction = 0;
+    const updated = transactions.map((t) => {
+      if (t.method === 'cc' && !t.paidThisMonth) {
+        totalDeduction += getTxMonthlyBill(t);
+        return { ...t, paidThisMonth: true };
+      }
+      return t;
+    });
+
+    setTransactions(updated);
+    setCashBalanceState((prev) => Math.max(0, prev - totalDeduction));
+  };
+
+  const updateCcItem = (id: string, updates: Partial<Transaction>) => {
+    setTransactions((prev) =>
+      prev.map((t) => {
+        if (t.id === id) {
+          const updated = { ...t, ...updates };
+          return updated;
+        }
+        return t;
+      })
+    );
+  };
+
+  const addCategory = (item: Omit<CategoryItem, 'id'>) => {
+    const newCat: CategoryItem = {
+      ...item,
+      id: `cat-${Date.now()}`,
+    };
+    setCategories((prev) => [...prev, newCat]);
+  };
+
+  const updateCategory = (id: string, updates: Partial<CategoryItem>) => {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  };
+
+  const deleteCategory = (id: string) => {
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const addStock = (code: string, lots: number, avgBuy: number) => {
+    const upper = code.trim().toUpperCase();
+    const currentPrice = MARKET_STOCK_PRICES[upper] || avgBuy;
+    const newStock: StockItem = {
+      id: `st-${Date.now()}`,
+      code: upper,
+      lots: Math.max(1, lots),
+      avgBuy: Math.max(1, avgBuy),
+      currentPrice,
+    };
+    setStocks((prev) => [...prev, newStock]);
+  };
+
+  const updateStock = (id: string, updates: Partial<StockItem>) => {
+    setStocks((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+  };
+
+  const deleteStock = (id: string) => {
+    setStocks((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const addGoldHolding = (item: Omit<GoldHolding, 'id'>) => {
+    const newGold: GoldHolding = {
+      ...item,
+      id: `gd-${Date.now()}`,
+    };
+    setGoldHoldings((prev) => [...prev, newGold]);
+  };
+
+  const updateGoldHolding = (id: string, updates: Partial<GoldHolding>) => {
+    setGoldHoldings((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
+  };
+
+  const deleteGoldHolding = (id: string) => {
+    setGoldHoldings((prev) => prev.filter((g) => g.id !== id));
+  };
+
+  const resetAllData = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setCashBalanceState(18250000);
+    setCcLimitState(20000000);
+    setCcDueDateState(25);
+    setCategories(DEFAULT_CATEGORIES);
+    setTransactions(INITIAL_TRANSACTIONS);
+    setStocks(INITIAL_STOCKS);
+    setGoldHoldings(INITIAL_GOLD_HOLDINGS);
+  };
+
+  // Metrics computation
+  let stockValue = 0;
+  let stockCost = 0;
+  stocks.forEach((s) => {
+    stockValue += s.lots * 100 * s.currentPrice;
+    stockCost += s.lots * 100 * s.avgBuy;
+  });
+
+  let goldSpotVal = 0;
+  let goldSpotCost = 0;
+  let goldSpotGrams = 0;
+  let goldAntamVal = 0;
+  let goldAntamCost = 0;
+  let goldAntamGrams = 0;
+
+  goldHoldings.forEach((g) => {
+    const curPrice = g.type === 'spot' ? goldPrices.spot : goldPrices.antam;
+    const val = g.grams * curPrice;
+    const cost = g.grams * g.avgBuy;
+    if (g.type === 'spot') {
+      goldSpotVal += val;
+      goldSpotCost += cost;
+      goldSpotGrams += g.grams;
+    } else {
+      goldAntamVal += val;
+      goldAntamCost += cost;
+      goldAntamGrams += g.grams;
+    }
+  });
+
+  const totalAsset = stockValue + goldSpotVal + goldAntamVal;
+  const totalAssetCost = stockCost + goldSpotCost + goldAntamCost;
+  const totalAssetPL = totalAsset - totalAssetCost;
+  const totalAssetPLPct = totalAssetCost > 0 ? (totalAssetPL / totalAssetCost) * 100 : 0;
+
+  const thisMonthTotal = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const lastMonthTotal = lastMonthWeekly.reduce((a, b) => a + b, 0);
+
+  const thisMonthWeekly = [0, 0, 0, 0];
+  transactions.forEach((t) => {
+    const idx = Math.min(3, Math.max(0, t.weekIdx ?? 2));
+    thisMonthWeekly[idx] += t.amount;
+  });
+
+  const ccItems = transactions.filter((t) => t.method === 'cc');
+  let ccDueUnpaid = 0;
+  let ccDueTotal = 0;
+  let ccUsedLimit = 0;
+
+  ccItems.forEach((t) => {
+    const monthly = getTxMonthlyBill(t);
+    ccDueTotal += monthly;
+    if (!t.paidThisMonth) ccDueUnpaid += monthly;
+    ccUsedLimit += getTxCcHold(t);
+  });
+
+  const ccAvailableLimit = Math.max(0, ccLimit - ccUsedLimit);
+  const ccLimitPct = ccLimit > 0 ? Math.min(100, (ccUsedLimit / ccLimit) * 100) : 0;
+
+  const metrics: FinTrackMetrics = {
+    stockValue,
+    stockCost,
+    stockPL: stockValue - stockCost,
+    goldSpotVal,
+    goldSpotCost,
+    goldSpotGrams,
+    goldSpotPL: goldSpotVal - goldSpotCost,
+    goldAntamVal,
+    goldAntamCost,
+    goldAntamGrams,
+    goldAntamPL: goldAntamVal - goldAntamCost,
+    totalGoldVal: goldSpotVal + goldAntamVal,
+    totalGoldPL: goldSpotVal - goldSpotCost + (goldAntamVal - goldAntamCost),
+    totalAsset,
+    totalAssetCost,
+    totalAssetPL,
+    totalAssetPLPct,
+    thisMonthTotal,
+    lastMonthTotal,
+    thisMonthWeekly,
+    ccItems,
+    ccDueUnpaid,
+    ccDueTotal,
+    ccUsedLimit,
+    ccAvailableLimit,
+    ccLimitPct,
+  };
+
+  return (
+    <FinTrackContext.Provider
+      value={{
+        activeTab,
+        setActiveTab,
+        chartMode,
+        setChartMode,
+        compareOct,
+        setCompareOct,
+        selectedWeekIdx,
+        setSelectedWeekIdx,
+        selectedMonthIdx,
+        setSelectedMonthIdx,
+        cashBalance,
+        setCashBalance,
+        ccLimit,
+        setCcLimit,
+        ccDueDate,
+        setCcDueDate,
+        categories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        transactions,
+        addTransaction,
+        updateTransaction,
+        deleteTransaction,
+        stocks,
+        addStock,
+        updateStock,
+        deleteStock,
+        goldPrices,
+        goldHoldings,
+        addGoldHolding,
+        updateGoldHolding,
+        deleteGoldHolding,
+        monthlyHistory,
+        lastMonthWeekly,
+        expandedCcId,
+        setExpandedCcId,
+        highlightedCcId,
+        setHighlightedCcId,
+        metrics,
+        payAllCcDue,
+        updateCcItem,
+        resetAllData,
+      }}
+    >
+      {children}
+    </FinTrackContext.Provider>
+  );
+};
+
+export const useFinTrack = (): FinTrackContextType => {
+  const context = useContext(FinTrackContext);
+  if (!context) {
+    throw new Error('useFinTrack must be used within FinTrackProvider');
+  }
+  return context;
+};
