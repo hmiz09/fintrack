@@ -14,12 +14,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ isOpen, onClose }) => {
 
   // Stock Form State
   const [stockCode, setStockCode] = useState('');
-  const [lots, setLots] = useState(10);
+  const [lots, setLots] = useState('10');
   const [avgBuyPrice, setAvgBuyPrice] = useState('9.000');
 
   // Gold Form State
   const [goldType, setGoldType] = useState<'spot' | 'antam'>('antam');
-  const [grams, setGrams] = useState(10);
+  const [grams, setGrams] = useState('10');
   const [goldAvgPrice, setGoldAvgPrice] = useState('1.350.000');
   const [goldLabel, setGoldLabel] = useState('Antam Bar');
 
@@ -30,13 +30,15 @@ export const AssetModal: React.FC<AssetModalProps> = ({ isOpen, onClose }) => {
     if (assetType === 'stock') {
       const code = stockCode.trim().toUpperCase();
       if (!code) return;
+      const lotsNum = Math.max(1, parseInt(lots, 10) || 1);
       const buyPrice = parseDots(avgBuyPrice);
-      addStock(code, lots, buyPrice);
+      addStock(code, lotsNum, buyPrice);
     } else {
+      const gramsNum = Math.max(0.1, parseFloat(grams) || 1);
       const buyPrice = parseDots(goldAvgPrice);
       addGoldHolding({
         type: goldType,
-        grams: Number(grams) || 1,
+        grams: gramsNum,
         avgBuy: buyPrice,
         label: goldLabel.trim() || (goldType === 'spot' ? 'Digital Gold' : 'Antam Bar'),
       });
@@ -109,10 +111,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ isOpen, onClose }) => {
                   Volume (Lots, 1 Lot = 100 Shares)
                 </label>
                 <input
-                  type="number"
-                  min={1}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="e.g. 10"
                   value={lots}
-                  onChange={(e) => setLots(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  onChange={(e) => setLots(e.target.value.replace(/[^0-9]/g, ''))}
                   className="w-full px-3 py-2 bg-rose-50/40 rounded-xl border border-rose-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 min-h-[42px]"
                   required
                 />
@@ -187,11 +191,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({ isOpen, onClose }) => {
                   Weight (Grams)
                 </label>
                 <input
-                  type="number"
-                  step="0.1"
-                  min={0.1}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="e.g. 10"
                   value={grams}
-                  onChange={(e) => setGrams(parseFloat(e.target.value) || 1)}
+                  onChange={(e) => setGrams(e.target.value.replace(/,/g, '.').replace(/[^0-9.]/g, ''))}
                   className="w-full px-3 py-2 bg-amber-50/30 rounded-xl border border-amber-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[42px]"
                   required
                 />

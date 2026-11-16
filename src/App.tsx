@@ -54,9 +54,9 @@ const FinTrackApp: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-rose-50/50 flex justify-center selection:bg-rose-100 selection:text-rose-600">
-      {/* Mobile constrained frame */}
-      <div className="w-full max-w-md min-h-screen bg-[#fff9fb] border-x border-rose-200/60 shadow-xl flex flex-col relative pb-28">
+    <div className="min-h-screen w-full bg-[#fff9fb] sm:bg-rose-50/50 flex justify-center selection:bg-rose-100 selection:text-rose-600 overflow-x-hidden">
+      {/* Mobile-first full screen, constrained card frame on sm+ screens */}
+      <div className="w-full sm:max-w-md min-h-screen bg-[#fff9fb] sm:border-x sm:border-rose-200/60 sm:shadow-xl flex flex-col relative pb-32 pt-[env(safe-area-inset-top)] px-[env(safe-area-inset-left)]">
         {/* Top Header (User greeting, avatar, settings icon) */}
         <TopHeader
           onOpenCategories={() => setIsCategoryModalOpen(true)}
@@ -100,7 +100,7 @@ const FinTrackApp: React.FC = () => {
         {/* Bottom Navigation Bar */}
         <nav
           aria-label="Main Navigation"
-          className="fixed bottom-0 max-w-md w-full bg-white/95 backdrop-blur-md border-t border-rose-200/80 px-3 py-2 flex items-center justify-around z-30 shadow-lg"
+          className="fixed bottom-0 inset-x-0 mx-auto w-full sm:max-w-md bg-white/95 backdrop-blur-md border-t border-rose-200/80 px-3 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around z-30 shadow-lg"
         >
           {navItems.map((item) => {
             const active = activeTab === item.key;
