@@ -12,7 +12,16 @@ import {
   AlertTriangle,
   HardDrive,
   Database,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  Key,
+  Radio,
 } from 'lucide-react';
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+} from '../../services/supabase';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -27,6 +36,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     resetAllData,
     exportData,
     importData,
+    syncPin,
+    syncStatus,
+    connectSync,
+    disconnectSync,
+    triggerCloudSync,
+    isSupabaseReady,
   } = useFinTrack();
 
   const [inputName, setInputName] = useState(userName);
@@ -34,6 +49,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [showConfirmResetZero, setShowConfirmResetZero] = useState(false);
   const [showConfirmDemo, setShowConfirmDemo] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Cloud Sync form state
+  const [inputPin, setInputPin] = useState(syncPin || '');
+  const [pinFeedback, setPinFeedback] = useState<string | null>(null);
+  const [showConfigForm, setShowConfigForm] = useState(false);
+
+  const initialCfg = getSupabaseConfig();
+  const [cfgUrl, setCfgUrl] = useState(initialCfg.url);
+  const [cfgKey, setCfgKey] = useState(initialCfg.anonKey);
+  const [cfgSavedMsg, setCfgSavedMsg] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,6 +69,29 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     setUserName(inputName);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2000);
+  };
+
+  const handleConnectPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputPin.trim()) return;
+    const res = await connectSync(inputPin);
+    setPinFeedback(res.message);
+    setTimeout(() => setPinFeedback(null), 3000);
+  };
+
+  const handleSaveSupabaseConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveSupabaseConfig(cfgUrl, cfgKey);
+    setCfgSavedMsg(true);
+    setTimeout(() => setCfgSavedMsg(false), 2500);
+    window.location.reload();
+  };
+
+  const handleTriggerManualSync = async () => {
+    setPinFeedback('Menyinkronkan data...');
+    await triggerCloudSync();
+    setPinFeedback('Sinkronisasi selesai!');
+    setTimeout(() => setPinFeedback(null), 2000);
   };
 
   const handleConfirmResetZero = () => {
@@ -261,12 +309,222 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
 
-          {/* Section 3: Storage & Backup */}
+          {/* Section 3: Cloud Sync */}
+          <div className="bg-white p-4 rounded-2xl border border-rose-200/70 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-rose-600" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  3. Sinkronisasi Antar Perangkat (Cloud Sync)
+                </h3>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  syncPin && syncStatus === 'connected'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : syncPin && syncStatus === 'syncing'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {syncPin && syncStatus === 'connected' ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Terhubung</span>
+                  </>
+                ) : syncPin && syncStatus === 'syncing' ? (
+                  <>
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                    <span>Menyinkronkan</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff className="w-2.5 h-2.5" />
+                    <span>Belum Aktif</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Hubungkan iPhone pacarmu dan laptopmu secara otomatis menggunakan satu PIN rahasia berdua. Cukup masukkan sekali, seterusnya langsung sinkron real-time.
+            </p>
+
+            {/* If Supabase is not yet configured, show quick config setup */}
+            {!isSupabaseReady ? (
+              <div className="p-3.5 rounded-xl bg-rose-50/60 border border-rose-200 space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <Database className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-rose-900">
+                      Koneksikan Database Supabase (Gratis)
+                    </p>
+                    <p className="text-[11px] text-rose-800/80 mt-0.5 leading-snug">
+                      Hanya butuh 1 akun Supabase gratis untuk menyimpan data bersama. Masukkan URL & Anon Key di bawah ini:
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveSupabaseConfig} className="space-y-2 pt-1">
+                  <div>
+                    <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                      Supabase Project URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://xyzcompany.supabase.co"
+                      value={cfgUrl}
+                      onChange={(e) => setCfgUrl(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white rounded-lg border border-rose-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                      Supabase Anon Public Key
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+                      value={cfgKey}
+                      onChange={(e) => setCfgKey(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white rounded-lg border border-rose-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                      required
+                    />
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    {cfgSavedMsg && (
+                      <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Tersimpan! Memuat ulang...</span>
+                      </span>
+                    )}
+                    <button
+                      type="submit"
+                      className="ml-auto px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-2xs transition-all"
+                    >
+                      Simpan Kredensial
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : syncPin ? (
+              /* Already Connected */
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Radio className="w-4 h-4 text-emerald-600" />
+                    <div>
+                      <p className="text-xs font-bold text-emerald-950">
+                        PIN Aktif: <span className="uppercase text-rose-600 font-mono text-sm">{syncPin}</span>
+                      </p>
+                      <p className="text-[10px] text-emerald-700">
+                        Sinkronisasi otomatis aktif secara real-time.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTriggerManualSync}
+                    className="flex-1 py-2 px-3 bg-white hover:bg-emerald-100/60 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 min-h-[38px]"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Sync Manual</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={disconnectSync}
+                    className="py-2 px-3 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition-all active:scale-95 min-h-[38px]"
+                  >
+                    Putuskan
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Ready to Connect with PIN */
+              <form onSubmit={handleConnectPin} className="space-y-3">
+                <div>
+                  <label htmlFor="sync-pin-input" className="block text-[11px] text-slate-500 font-medium mb-1">
+                    Buat atau Masukkan PIN Rahasia Berdua
+                  </label>
+                  <div className="relative">
+                    <Key className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="sync-pin-input"
+                      type="text"
+                      value={inputPin}
+                      onChange={(e) => setInputPin(e.target.value.toUpperCase())}
+                      placeholder="Contoh: ROSE-HARIS atau 123456"
+                      maxLength={20}
+                      className="w-full pl-9 pr-3 py-2 bg-rose-50/40 rounded-xl border border-rose-200 text-xs font-bold uppercase tracking-wider text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 min-h-[42px]"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfigForm(!showConfigForm)}
+                    className="text-[11px] text-slate-400 hover:text-slate-600 underline"
+                  >
+                    {showConfigForm ? 'Tutup Pengaturan API' : 'Ubah URL Supabase'}
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all min-h-[40px] flex items-center gap-1.5"
+                  >
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>Hubungkan</span>
+                  </button>
+                </div>
+
+                {/* Optional edit Supabase config */}
+                {showConfigForm && (
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 mt-2">
+                    <input
+                      type="url"
+                      placeholder="Supabase URL"
+                      value={cfgUrl}
+                      onChange={(e) => setCfgUrl(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 text-xs text-slate-800"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Supabase Anon Key"
+                      value={cfgKey}
+                      onChange={(e) => setCfgKey(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 text-xs text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveSupabaseConfig}
+                      className="w-full py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg"
+                    >
+                      Perbarui Kredensial
+                    </button>
+                  </div>
+                )}
+              </form>
+            )}
+
+            {pinFeedback && (
+              <p className="text-center text-xs font-semibold text-rose-600 mt-1 animate-in fade-in">
+                {pinFeedback}
+              </p>
+            )}
+          </div>
+
+          {/* Section 4: Storage & Backup */}
           <div className="bg-white p-4 rounded-2xl border border-rose-200/70 shadow-2xs space-y-3">
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-rose-600" />
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                3. Cara Kerja Penyimpanan
+                4. Cara Kerja Penyimpanan
               </h3>
             </div>
 

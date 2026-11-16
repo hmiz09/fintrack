@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   DEFAULT_CATEGORIES,
   INITIAL_GOLD_HOLDINGS,
@@ -15,7 +15,9 @@ import type {
   MonthlyHistoryItem,
   StockItem,
   Transaction,
+  SyncStatus,
 } from '../types';
+import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase';
 
 export interface FinTrackMetrics {
   stockValue: number;
@@ -98,6 +100,13 @@ interface FinTrackContextType {
   lastMarketSync: number | null;
   isSyncingMarket: boolean;
   fetchMarketPrices: () => Promise<void>;
+  syncPin: string | null;
+  syncStatus: SyncStatus;
+  lastCloudSync: number | null;
+  connectSync: (pin: string) => Promise<{ success: boolean; message: string }>;
+  disconnectSync: () => void;
+  triggerCloudSync: () => Promise<void>;
+  isSupabaseReady: boolean;
 }
 
 const STORAGE_KEY = 'fintrack_state_v2';
@@ -147,6 +156,16 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     { label: 'Sep', total: 5190000 },
   ]);
   const [lastMonthWeekly] = useState<number[]>([1420000, 1280000, 1510000, 1240000]);
+
+  // Cloud Sync state
+  const SYNC_PIN_STORAGE_KEY = 'fintrack_sync_pin';
+  const [syncPin, setSyncPinState] = useState<string | null>(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem(SYNC_PIN_STORAGE_KEY) : null;
+  });
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('disconnected');
+  const [lastCloudSync, setLastCloudSync] = useState<number | null>(null);
+  const isRemoteApplying = useRef<boolean>(false);
+  const isInitialSyncMount = useRef<boolean>(true);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -454,6 +473,232 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const applyRemoteData = (parsed: Record<string, unknown>) => {
+    if (!parsed || typeof parsed !== 'object') return;
+    if (typeof parsed.userName === 'string') setUserNameState(parsed.userName);
+    if (typeof parsed.cashBalance === 'number') setCashBalanceState(parsed.cashBalance);
+    if (typeof parsed.ccLimit === 'number') setCcLimitState(parsed.ccLimit);
+    if (typeof parsed.ccDueDate === 'number') setCcDueDateState(parsed.ccDueDate);
+    if (Array.isArray(parsed.categories)) setCategories(parsed.categories as CategoryItem[]);
+    if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions as Transaction[]);
+    if (Array.isArray(parsed.stocks)) setStocks(parsed.stocks as StockItem[]);
+    if (Array.isArray(parsed.goldHoldings)) setGoldHoldings(parsed.goldHoldings as GoldHolding[]);
+    if (parsed.goldPrices && typeof (parsed.goldPrices as GoldPrices).spot === 'number') {
+      setGoldPricesState(parsed.goldPrices as GoldPrices);
+    }
+  };
+
+  // Cloud Sync: Initial pull and Realtime subscriber
+  useEffect(() => {
+    if (!syncPin || !isSupabaseConfigured()) {
+      setSyncStatus('disconnected');
+      return;
+    }
+
+    const client = getSupabaseClient();
+    if (!client) {
+      setSyncStatus('disconnected');
+      return;
+    }
+
+    let isMounted = true;
+    setSyncStatus('connecting');
+
+    const initSync = async () => {
+      try {
+        const { data, error } = await client
+          .from('fintrack_sync')
+          .select('data, updated_at')
+          .eq('pin', syncPin.toLowerCase())
+          .maybeSingle();
+
+        if (!isMounted) return;
+
+        if (error) {
+          setSyncStatus('error');
+          return;
+        }
+
+        if (data && data.data) {
+          isRemoteApplying.current = true;
+          applyRemoteData(data.data as Record<string, unknown>);
+          setLastCloudSync(Date.now());
+          setSyncStatus('connected');
+          setTimeout(() => {
+            isRemoteApplying.current = false;
+          }, 800);
+        } else {
+          // Seed cloud database with current device state
+          const payload = {
+            userName,
+            cashBalance,
+            ccLimit,
+            ccDueDate,
+            categories,
+            transactions,
+            stocks,
+            goldHoldings,
+            goldPrices,
+          };
+          await client.from('fintrack_sync').upsert({
+            pin: syncPin.toLowerCase(),
+            data: payload,
+            updated_at: new Date().toISOString(),
+          });
+          if (!isMounted) return;
+          setLastCloudSync(Date.now());
+          setSyncStatus('connected');
+        }
+      } catch {
+        if (isMounted) setSyncStatus('error');
+      }
+    };
+
+    initSync();
+
+    // Supabase Realtime channel for cross-device live updates
+    const channel = client
+      .channel(`sync-room-${syncPin.toLowerCase()}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'fintrack_sync',
+          filter: `pin=eq.${syncPin.toLowerCase()}`,
+        },
+        (payload) => {
+          if (!isMounted) return;
+          const newRecord = payload.new as { data?: Record<string, unknown> } | undefined;
+          if (newRecord && newRecord.data) {
+            isRemoteApplying.current = true;
+            applyRemoteData(newRecord.data);
+            setLastCloudSync(Date.now());
+            setSyncStatus('connected');
+            setTimeout(() => {
+              isRemoteApplying.current = false;
+            }, 800);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      channel.unsubscribe();
+    };
+  }, [syncPin]);
+
+  // Cloud Sync: Auto-push local changes to Supabase (debounced 900ms)
+  useEffect(() => {
+    if (isInitialSyncMount.current) {
+      isInitialSyncMount.current = false;
+      return;
+    }
+
+    if (!syncPin || !isSupabaseConfigured() || isRemoteApplying.current) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const client = getSupabaseClient();
+        if (!client || !syncPin) return;
+
+        setSyncStatus('syncing');
+        const payload = {
+          userName,
+          cashBalance,
+          ccLimit,
+          ccDueDate,
+          categories,
+          transactions,
+          stocks,
+          goldHoldings,
+          goldPrices,
+        };
+
+        const { error } = await client.from('fintrack_sync').upsert({
+          pin: syncPin.toLowerCase(),
+          data: payload,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (!error) {
+          setSyncStatus('connected');
+          setLastCloudSync(Date.now());
+        } else {
+          setSyncStatus('error');
+        }
+      } catch {
+        setSyncStatus('error');
+      }
+    }, 900);
+
+    return () => clearTimeout(timer);
+  }, [
+    syncPin,
+    userName,
+    cashBalance,
+    ccLimit,
+    ccDueDate,
+    categories,
+    transactions,
+    stocks,
+    goldHoldings,
+    goldPrices,
+  ]);
+
+  const connectSync = async (rawPin: string): Promise<{ success: boolean; message: string }> => {
+    const clean = rawPin.trim().toLowerCase();
+    if (!clean || clean.length < 3) {
+      return { success: false, message: 'PIN minimal 3 karakter.' };
+    }
+    if (!isSupabaseConfigured()) {
+      return { success: false, message: 'Kredensial Supabase belum dikonfigurasi.' };
+    }
+
+    localStorage.setItem(SYNC_PIN_STORAGE_KEY, clean);
+    setSyncPinState(clean);
+    return { success: true, message: 'Menghubungkan ke Cloud Sync...' };
+  };
+
+  const disconnectSync = () => {
+    localStorage.removeItem(SYNC_PIN_STORAGE_KEY);
+    setSyncPinState(null);
+    setSyncStatus('disconnected');
+    setLastCloudSync(null);
+  };
+
+  const triggerCloudSync = async () => {
+    if (!syncPin || !isSupabaseConfigured()) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    setSyncStatus('syncing');
+    try {
+      const { data, error } = await client
+        .from('fintrack_sync')
+        .select('data')
+        .eq('pin', syncPin.toLowerCase())
+        .maybeSingle();
+
+      if (!error && data && data.data) {
+        isRemoteApplying.current = true;
+        applyRemoteData(data.data as Record<string, unknown>);
+        setLastCloudSync(Date.now());
+        setSyncStatus('connected');
+        setTimeout(() => {
+          isRemoteApplying.current = false;
+        }, 800);
+      } else {
+        setSyncStatus('connected');
+      }
+    } catch {
+      setSyncStatus('error');
+    }
+  };
+
   // Metrics computation
   let stockValue = 0;
   let stockCost = 0;
@@ -596,6 +841,13 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         lastMarketSync,
         isSyncingMarket,
         fetchMarketPrices,
+        syncPin,
+        syncStatus,
+        lastCloudSync,
+        connectSync,
+        disconnectSync,
+        triggerCloudSync,
+        isSupabaseReady: isSupabaseConfigured(),
       }}
     >
       {children}

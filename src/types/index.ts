@@ -52,3 +52,4 @@ export interface MonthlyHistoryItem {
 
 export type ActiveTab = 'dashboard' | 'activity' | 'cc' | 'assets';
 export type ChartMode = 'week' | 'month';
+export type SyncStatus = 'disconnected' | 'connecting' | 'connected' | 'syncing' | 'error';

@@ -8,7 +8,7 @@ interface TopHeaderProps {
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenCategories, onOpenProfile }) => {
-  const { userName } = useFinTrack();
+  const { userName, syncPin, syncStatus } = useFinTrack();
   const displayName = userName?.trim() || 'Rose';
   const initial = displayName.charAt(0).toUpperCase();
 
@@ -53,10 +53,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenCategories, onOpenPr
           <button
             type="button"
             onClick={onOpenProfile}
-            className="min-h-[44px] min-w-[44px] p-2.5 rounded-full bg-white/90 border border-rose-200/70 text-rose-950/70 hover:text-rose-600 hover:bg-rose-50/60 transition-colors shadow-xs flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500"
+            className="relative min-h-[44px] min-w-[44px] p-2.5 rounded-full bg-white/90 border border-rose-200/70 text-rose-950/70 hover:text-rose-600 hover:bg-rose-50/60 transition-colors shadow-xs flex items-center justify-center focus-visible:outline-2 focus-visible:outline-rose-500"
             aria-label="Profil & Pengaturan"
           >
             <Settings className="w-4 h-4" />
+            {syncPin && (
+              <span
+                className={`absolute top-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                  syncStatus === 'connected'
+                    ? 'bg-emerald-500'
+                    : syncStatus === 'syncing'
+                    ? 'bg-amber-500 animate-pulse'
+                    : 'bg-rose-500'
+                }`}
+                title={syncStatus === 'connected' ? 'Cloud Sync Terhubung' : 'Cloud Sync'}
+              />
+            )}
           </button>
 
           <button
