@@ -18,6 +18,12 @@ import type {
   SyncStatus,
 } from '../types';
 import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase';
+import {
+  sendTransactionToSheets,
+  sendBulkTransactionsToSheets,
+  testSheetsConnection,
+  type SheetsSyncResult,
+} from '../services/googleSheets';
 
 export interface FinTrackMetrics {
   stockValue: number;
@@ -107,6 +113,13 @@ interface FinTrackContextType {
   disconnectSync: () => void;
   triggerCloudSync: () => Promise<void>;
   isSupabaseReady: boolean;
+  sheetsWebhookUrl: string;
+  setSheetsWebhookUrl: (url: string) => void;
+  autoSyncSheets: boolean;
+  setAutoSyncSheets: (enabled: boolean) => void;
+  isSyncingSheets: boolean;
+  syncAllToSheets: () => Promise<SheetsSyncResult>;
+  testSheetsWebhook: () => Promise<SheetsSyncResult>;
 }
 
 const STORAGE_KEY = 'fintrack_state_v2';
@@ -166,6 +179,19 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [lastCloudSync, setLastCloudSync] = useState<number | null>(null);
   const isRemoteApplying = useRef<boolean>(false);
   const isInitialSyncMount = useRef<boolean>(true);
+
+  // Google Sheets Webhook Sync state
+  const SHEETS_WEBHOOK_KEY = 'fintrack_sheets_webhook';
+  const SHEETS_AUTOSYNC_KEY = 'fintrack_sheets_autosync';
+  const [sheetsWebhookUrl, setSheetsWebhookUrlState] = useState<string>(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem(SHEETS_WEBHOOK_KEY) || '' : '';
+  });
+  const [autoSyncSheets, setAutoSyncSheetsState] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const v = localStorage.getItem(SHEETS_AUTOSYNC_KEY);
+    return v === null ? true : v === 'true';
+  });
+  const [isSyncingSheets, setIsSyncingSheets] = useState<boolean>(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -227,6 +253,11 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTransactions((prev) => [newTx, ...prev]);
     if (newTx.method === 'cash') {
       setCashBalanceState((prev) => Math.max(0, prev - newTx.amount));
+    }
+
+    // Auto-kirim transaksi ke Google Sheets jika webhook diatur
+    if (sheetsWebhookUrl && autoSyncSheets) {
+      sendTransactionToSheets(sheetsWebhookUrl, newTx, 'expense');
     }
   };
 
@@ -486,6 +517,14 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (parsed.goldPrices && typeof (parsed.goldPrices as GoldPrices).spot === 'number') {
       setGoldPricesState(parsed.goldPrices as GoldPrices);
     }
+    if (typeof parsed.sheetsWebhookUrl === 'string' && parsed.sheetsWebhookUrl && !sheetsWebhookUrl) {
+      setSheetsWebhookUrlState(parsed.sheetsWebhookUrl);
+      localStorage.setItem(SHEETS_WEBHOOK_KEY, parsed.sheetsWebhookUrl);
+    }
+    if (typeof parsed.autoSyncSheets === 'boolean') {
+      setAutoSyncSheetsState(parsed.autoSyncSheets);
+      localStorage.setItem(SHEETS_AUTOSYNC_KEY, String(parsed.autoSyncSheets));
+    }
   };
 
   // Cloud Sync: Initial pull and Realtime subscriber
@@ -539,6 +578,8 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             stocks,
             goldHoldings,
             goldPrices,
+            sheetsWebhookUrl,
+            autoSyncSheets,
           };
           await client.from('fintrack_sync').upsert({
             pin: syncPin.toLowerCase(),
@@ -616,6 +657,8 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           stocks,
           goldHoldings,
           goldPrices,
+          sheetsWebhookUrl,
+          autoSyncSheets,
         };
 
         const { error } = await client.from('fintrack_sync').upsert({
@@ -647,6 +690,8 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     stocks,
     goldHoldings,
     goldPrices,
+    sheetsWebhookUrl,
+    autoSyncSheets,
   ]);
 
   const connectSync = async (rawPin: string): Promise<{ success: boolean; message: string }> => {
@@ -696,6 +741,43 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch {
       setSyncStatus('error');
+    }
+  };
+
+  const setSheetsWebhookUrl = (url: string) => {
+    const trimmed = url.trim();
+    setSheetsWebhookUrlState(trimmed);
+    localStorage.setItem(SHEETS_WEBHOOK_KEY, trimmed);
+  };
+
+  const setAutoSyncSheets = (enabled: boolean) => {
+    setAutoSyncSheetsState(enabled);
+    localStorage.setItem(SHEETS_AUTOSYNC_KEY, String(enabled));
+  };
+
+  const syncAllToSheets = async (): Promise<SheetsSyncResult> => {
+    if (!sheetsWebhookUrl) {
+      return { success: false, message: 'URL Webhook Google Sheets belum diisi.' };
+    }
+    setIsSyncingSheets(true);
+    try {
+      const res = await sendBulkTransactionsToSheets(sheetsWebhookUrl, transactions);
+      return res;
+    } finally {
+      setIsSyncingSheets(false);
+    }
+  };
+
+  const testSheetsWebhook = async (): Promise<SheetsSyncResult> => {
+    if (!sheetsWebhookUrl) {
+      return { success: false, message: 'URL Webhook Google Sheets belum diisi.' };
+    }
+    setIsSyncingSheets(true);
+    try {
+      const res = await testSheetsConnection(sheetsWebhookUrl);
+      return res;
+    } finally {
+      setIsSyncingSheets(false);
     }
   };
 
@@ -848,6 +930,13 @@ export const FinTrackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         disconnectSync,
         triggerCloudSync,
         isSupabaseReady: isSupabaseConfigured(),
+        sheetsWebhookUrl,
+        setSheetsWebhookUrl,
+        autoSyncSheets,
+        setAutoSyncSheets,
+        isSyncingSheets,
+        syncAllToSheets,
+        testSheetsWebhook,
       }}
     >
       {children}

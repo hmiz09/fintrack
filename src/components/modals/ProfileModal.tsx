@@ -17,6 +17,12 @@ import {
   RefreshCw,
   Key,
   Radio,
+  FileSpreadsheet,
+  Copy,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  Send,
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -27,6 +33,99 @@ interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+const APPS_SCRIPT_CODE = `function doPost(e) {
+  try {
+    var raw = e.postData.contents;
+    var data = JSON.parse(raw);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // 1. Tambah Transaksi Real-time
+    if (data.action === "add_transaction") {
+      var tx = data.transaction || {};
+      var isIncome = data.type === "income";
+
+      if (isIncome) {
+        var sheetIncome = ss.getSheetByName("Income") || ss.getSheetByName("income");
+        if (sheetIncome) {
+          var rowIdx = getFirstEmptyRow(sheetIncome);
+          sheetIncome.getRange(rowIdx, 1, 1, 5).setValues([[
+            tx.date || formatToday(),
+            tx.title || "Pemasukan",
+            tx.category || "Umum",
+            Number(tx.amount) || 0,
+            tx.note || ""
+          ]]);
+        }
+      } else {
+        var sheetExp = ss.getSheetByName("Daily Expenses") || ss.getSheetByName("daily expenses") || ss.getSheetByName("transaksi");
+        if (sheetExp) {
+          var rowIdx = getFirstEmptyRow(sheetExp);
+          var method = tx.method === "cc" ? (tx.cardName || "CC Blibli") : (tx.method || "Cash");
+          sheetExp.getRange(rowIdx, 1, 1, 6).setValues([[
+            tx.date || formatToday(),
+            tx.title || "Pengeluaran",
+            tx.category || "Lain-lain",
+            method,
+            Number(tx.amount) || 0,
+            tx.note || ""
+          ]]);
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "OK" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 2. Sinkronisasi Massal Semua Transaksi
+    if (data.action === "bulk_sync_expenses") {
+      var sheetExp = ss.getSheetByName("Daily Expenses") || ss.getSheetByName("daily expenses") || ss.getSheetByName("transaksi");
+      if (sheetExp && Array.isArray(data.transactions) && data.transactions.length > 0) {
+        var startRow = getFirstEmptyRow(sheetExp);
+        var rows = data.transactions.map(function(t) {
+          var method = t.method === "cc" ? (t.cardName || "CC Blibli") : (t.method || "Cash");
+          return [
+            t.date || formatToday(),
+            t.title || "Pengeluaran",
+            t.category || "Lain-lain",
+            method,
+            Number(t.amount) || 0,
+            t.note || ""
+          ];
+        });
+        sheetExp.getRange(startRow, 1, rows.length, 6).setValues(rows);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, count: data.transactions.length })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. Tes Koneksi Webhook
+    if (data.action === "test_connection") {
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Connected!" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Unknown action" })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ status: "active", app: "FinTrack" })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getFirstEmptyRow(sheet) {
+  var colA = sheet.getRange("A:A").getValues();
+  for (var i = 1; i < colA.length; i++) {
+    var val = colA[i][0];
+    if (val === null || val === undefined || val.toString().trim() === "") {
+      return i + 1;
+    }
+  }
+  return sheet.getLastRow() + 1;
+}
+
+function formatToday() {
+  return Utilities.formatDate(new Date(), "GMT+7", "dd-MMM-yyyy");
+}`;
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
   const {
@@ -42,6 +141,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     disconnectSync,
     triggerCloudSync,
     isSupabaseReady,
+    sheetsWebhookUrl,
+    setSheetsWebhookUrl,
+    autoSyncSheets,
+    setAutoSyncSheets,
+    syncAllToSheets,
+    testSheetsWebhook,
   } = useFinTrack();
 
   const [inputName, setInputName] = useState(userName);
@@ -54,6 +159,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [inputPin, setInputPin] = useState(syncPin || '');
   const [pinFeedback, setPinFeedback] = useState<string | null>(null);
   const [showConfigForm, setShowConfigForm] = useState(false);
+
+  // Google Sheets state
+  const [inputSheetsUrl, setInputSheetsUrl] = useState(sheetsWebhookUrl || '');
+  const [sheetsFeedback, setSheetsFeedback] = useState<string | null>(null);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [showScriptGuide, setShowScriptGuide] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [isBulkSyncing, setIsBulkSyncing] = useState(false);
+
+  React.useEffect(() => {
+    if (sheetsWebhookUrl) {
+      setInputSheetsUrl(sheetsWebhookUrl);
+    }
+  }, [sheetsWebhookUrl]);
 
   const initialCfg = getSupabaseConfig();
   const [cfgUrl, setCfgUrl] = useState(initialCfg.url);
@@ -92,6 +211,49 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     await triggerCloudSync();
     setPinFeedback('Sinkronisasi selesai!');
     setTimeout(() => setPinFeedback(null), 2000);
+  };
+
+  const handleSaveSheetsUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSheetsWebhookUrl(inputSheetsUrl);
+    setSheetsFeedback('URL Webhook Google Sheets berhasil disimpan!');
+    setTimeout(() => setSheetsFeedback(null), 3000);
+  };
+
+  const handleTestSheets = async () => {
+    if (!inputSheetsUrl.trim()) {
+      setSheetsFeedback('Harap masukkan URL Webhook terlebih dahulu.');
+      setTimeout(() => setSheetsFeedback(null), 3000);
+      return;
+    }
+    setSheetsWebhookUrl(inputSheetsUrl);
+    setIsTesting(true);
+    setSheetsFeedback('Menguji koneksi ke Google Sheets...');
+    const res = await testSheetsWebhook();
+    setSheetsFeedback(res.message);
+    setIsTesting(false);
+    setTimeout(() => setSheetsFeedback(null), 4000);
+  };
+
+  const handleBulkSyncSheets = async () => {
+    if (!inputSheetsUrl.trim()) {
+      setSheetsFeedback('Harap masukkan dan simpan URL Webhook terlebih dahulu.');
+      setTimeout(() => setSheetsFeedback(null), 3000);
+      return;
+    }
+    setSheetsWebhookUrl(inputSheetsUrl);
+    setIsBulkSyncing(true);
+    setSheetsFeedback('Mengirim seluruh data transaksi ke Google Sheets...');
+    const res = await syncAllToSheets();
+    setSheetsFeedback(res.message);
+    setIsBulkSyncing(false);
+    setTimeout(() => setSheetsFeedback(null), 4000);
+  };
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(APPS_SCRIPT_CODE);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2500);
   };
 
   const handleConfirmResetZero = () => {
@@ -519,12 +681,175 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
             )}
           </div>
 
-          {/* Section 4: Storage & Backup */}
+          {/* Section 4: Google Sheets Integration */}
+          <div className="bg-white p-4 rounded-2xl border border-rose-200/70 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  4. Terhubung ke Google Spreadsheet
+                </h3>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  sheetsWebhookUrl
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {sheetsWebhookUrl ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Terhubung</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Belum Diatur</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Catatan transaksi di FinTrack bisa otomatis masuk ke baris baru Google Sheets pacarmu (tab <strong>Daily Expenses</strong> atau <strong>Income</strong>) secara real-time.
+            </p>
+
+            <form onSubmit={handleSaveSheetsUrl} className="space-y-3">
+              <div>
+                <label htmlFor="sheets-url-input" className="block text-[11px] text-slate-500 font-medium mb-1">
+                  URL Webhook Apps Script
+                </label>
+                <input
+                  id="sheets-url-input"
+                  type="url"
+                  value={inputSheetsUrl}
+                  onChange={(e) => setInputSheetsUrl(e.target.value)}
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  className="w-full px-3 py-2 bg-rose-50/40 rounded-xl border border-rose-200 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 min-h-[42px]"
+                />
+              </div>
+
+              {/* Auto Sync Toggle */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={autoSyncSheets}
+                  onChange={(e) => setAutoSyncSheets(e.target.checked)}
+                  className="w-4 h-4 rounded text-rose-600 border-rose-300 focus:ring-rose-500"
+                />
+                <span className="text-xs font-medium text-slate-700">
+                  Kirim otomatis ke Sheets setiap mencatat transaksi baru
+                </span>
+              </label>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-2xs transition-all min-h-[40px] flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Simpan URL</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTestSheets}
+                  disabled={isTesting || !inputSheetsUrl.trim()}
+                  className="px-3 py-2 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-semibold transition-all active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Send className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
+                  <span>{isTesting ? 'Menguji...' : 'Test Koneksi'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBulkSyncSheets}
+                  disabled={isBulkSyncing || !sheetsWebhookUrl}
+                  className="flex-1 px-3 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition-all active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isBulkSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isBulkSyncing ? 'Mengirim...' : 'Kirim Semua'}</span>
+                </button>
+              </div>
+            </form>
+
+            {sheetsFeedback && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-center text-xs font-semibold text-rose-700 animate-in fade-in">
+                {sheetsFeedback}
+              </div>
+            )}
+
+            {/* Accordion: Cara Pasang Script di Google Sheets */}
+            <div className="pt-1 border-t border-rose-100">
+              <button
+                type="button"
+                onClick={() => setShowScriptGuide(!showScriptGuide)}
+                className="w-full py-2 flex items-center justify-between text-xs font-bold text-slate-700 hover:text-rose-600 transition-colors"
+              >
+                <span className="flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Cara Pasang di Google Sheets (1 Menit)</span>
+                </span>
+                {showScriptGuide ? (
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+
+              {showScriptGuide && (
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3 mt-1 text-xs text-slate-600 animate-in fade-in">
+                  <ol className="space-y-2 list-decimal list-inside leading-relaxed text-[11px]">
+                    <li>
+                      Buka spreadsheet pacarmu di laptop/PC.
+                    </li>
+                    <li>
+                      Klik menu <strong>Ekstensi (Extensions)</strong> &gt; <strong>Apps Script</strong>.
+                    </li>
+                    <li>
+                      Hapus teks yang ada di editor, lalu tempel kode script di bawah ini.
+                    </li>
+                    <li>
+                      Klik tombol biru <strong>Terapkan (Deploy)</strong> di kanan atas &gt; <strong>Penerapan baru (New deployment)</strong>.
+                    </li>
+                    <li>
+                      Pilih jenis <strong>Aplikasi web (Web app)</strong>. Ubah "Yang memiliki akses (Who has access)" ke <strong>Siapa saja (Anyone)</strong>, lalu klik <strong>Terapkan</strong>.
+                    </li>
+                    <li>
+                      Salin <strong>URL Aplikasi Web</strong> yang muncul, lalu tempel ke kolom di atas. Selesai!
+                    </li>
+                  </ol>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyScript}
+                      className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1.5 min-h-[38px]"
+                    >
+                      {copiedScript ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Kode Script Berhasil Disalin!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Salin Kode Script (1 Klik)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 5: Storage & Backup */}
           <div className="bg-white p-4 rounded-2xl border border-rose-200/70 shadow-2xs space-y-3">
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-rose-600" />
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                4. Cara Kerja Penyimpanan
+                5. Cara Kerja Penyimpanan
               </h3>
             </div>
 
