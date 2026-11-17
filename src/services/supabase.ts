@@ -3,7 +3,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const STORAGE_URL_KEY = 'fintrack_supabase_url';
 const STORAGE_ANON_KEY = 'fintrack_supabase_anon_key';
 
-// Read from build environment variables or local storage
+// Default Supabase project credentials (configured for automatic cross-device pairing)
+const DEFAULT_SUPABASE_URL = 'https://eirtnhsbrlswvcmhwovu.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_Ajq5cSkao7mNRT9WaZgOtQ_6gTMWHCG';
+
+// Read from build environment variables, local storage, or defaults
 export const getSupabaseConfig = (): { url: string; anonKey: string } => {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -12,8 +16,8 @@ export const getSupabaseConfig = (): { url: string; anonKey: string } => {
   const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_ANON_KEY) || '' : '';
 
   return {
-    url: (envUrl || localUrl).trim(),
-    anonKey: (envKey || localKey).trim(),
+    url: (envUrl || localUrl || DEFAULT_SUPABASE_URL).trim(),
+    anonKey: (envKey || localKey || DEFAULT_SUPABASE_ANON_KEY).trim(),
   };
 };
 
